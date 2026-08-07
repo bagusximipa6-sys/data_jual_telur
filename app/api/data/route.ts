@@ -15,11 +15,8 @@ export async function GET() {
   }
 }
 
-// POST /api/data -> simpan seluruh data (hanya admin)
+// POST /api/data -> simpan seluruh data (semua perangkat bisa menyimpan, seperti ayam)
 export async function POST(request: NextRequest) {
-  if (!isAdminRequest(request)) {
-    return unauthorizedResponse();
-  }
   try {
     const body = (await request.json()) as Partial<AppDataSet>;
     if (!body || typeof body !== "object") {

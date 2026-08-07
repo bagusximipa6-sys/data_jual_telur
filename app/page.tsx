@@ -40,7 +40,7 @@ import {
 } from "@/types/finance";
 
 export default function Home() {
-const { state, dispatch, dataLoaded, isClient, loading, loadError, saveStatus, reload, handleResetData } =
+const { state, dispatch, dataLoaded, isClient, loading, loadError, syncStatus, reload, handleResetData } =
     useAppData();
   const { sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories } = state;
   const { role, adminUnlocked, handleUnlockAdmin, handleLogoutAdmin, handleRoleChange } = useAuth();
@@ -323,7 +323,7 @@ if (!isClient || loading) {
         </div>
       )}
       {/* Header Bar */}
-      <Header
+<Header
         stockOutCount={stockOut.length}
         role={role}
         adminUnlocked={adminUnlocked}
@@ -333,6 +333,7 @@ if (!isClient || loading) {
         selectedMonth={selectedMonth}
         availableMonths={availableMonths}
         onMonthChange={setSelectedMonth}
+        syncStatus={syncStatus}
       />
 
       {/* Main Container */}

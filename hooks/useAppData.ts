@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   DailySale,
   BakulRecord,
@@ -20,6 +20,14 @@ import {
   initialStockOut,
   initialOpsCategories,
 } from "@/app/rpa-data";
+import {
+  fetchAllFromServer,
+  hasAnyServerData,
+  pushAllToServer,
+  emptyDataset,
+  type LocalDataset,
+  type SyncStatus,
+} from "@/lib/sync";
 import { useAuth } from "@/hooks/useAuth";
 
 export type AppDataSet = {
@@ -33,72 +41,6 @@ export type AppDataSet = {
   opsCategories: string[];
 };
 
-type ActionMap = {
-  SET_ALL_DATA: AppDataSet;
-  RESET_DATA: undefined;
-  SET_FIELD: { [K in keyof AppDataSet]: { field: K; value: AppDataSet[K] } }[keyof AppDataSet];
-  ADD: { [K in keyof AppDataSet]: { field: K; value: AppDataSet[K][0] } }[keyof AppDataSet];
-  UPDATE: {
-    [K in keyof AppDataSet]: { field: K; index: number; value: AppDataSet[K][0] };
-  }[keyof AppDataSet];
-  DELETE: { field: keyof AppDataSet; index: number };
-};
-
-type Action = {
-  [K in keyof ActionMap]: {
-    type: K;
-    payload: ActionMap[K];
-  };
-}[keyof ActionMap] | { type: "RESET_DATA"; payload?: undefined };
-
-const initialState: AppDataSet = {
-  sales: initialSales as DailySale[],
-  bakulRecords: initialBakulRecords as BakulRecord[],
-  ops: initialOperationalRecords as OperationalRecord[],
-  items: initialItems as ItemMaster[],
-  bakulMasters: initialBakulMasters as BakulMaster[],
-  stockIn: initialStockIn as StockInRecord[],
-  stockOut: initialStockOut as StockOutRecord[],
-  opsCategories: initialOpsCategories as string[],
-};
-
-function dataReducer(state: AppDataSet, action: Action): AppDataSet {
-  switch (action.type) {
-    case "SET_ALL_DATA":
-      return action.payload ?? initialState;
-    case "SET_FIELD":
-      return { ...state, [action.payload.field]: action.payload.value };
-    case "ADD":
-      return { ...state, [action.payload.field]: [action.payload.value, ...(state[action.payload.field] as unknown[])] };
-    case "UPDATE": {
-      const list = [...(state[action.payload.field] as unknown[])];
-      list[action.payload.index] = action.payload.value;
-      return { ...state, [action.payload.field]: list };
-    }
-    case "DELETE": {
-      const list = (state[action.payload.field] as unknown[]).filter((_, i) => i !== action.payload.index);
-      return { ...state, [action.payload.field]: list };
-    }
-    case "RESET_DATA":
-      return initialState;
-    default:
-      return state;
-  }
-}
-
-async function loadFromApi(fallback: AppDataSet): Promise<AppDataSet> {
-  try {
-    const res = await fetch("/api/data", { cache: "no-store" });
-    if (!res.ok) throw new Error(`GET /api/data gagal: ${res.status}`);
-    const json = (await res.json()) as { ok: boolean; data?: AppDataSet };
-    if (!json.ok || !json.data) throw new Error("Respons /api/data tidak valid.");
-    return json.data;
-  } catch (err) {
-    console.error("Gagal memuat data dari backend:", err);
-    return fallback;
-  }
-}
-
 function subscribeToClient() {
   return () => {};
 }
@@ -106,110 +48,294 @@ function subscribeToClient() {
 export function useAppData() {
   const isClient = useSyncExternalStore(subscribeToClient, () => true, () => false);
   const { adminUnlocked } = useAuth();
-  const [state, dispatch] = useReducer(dataReducer, initialState);
-const [dataLoaded, setDataLoaded] = useState(false);
+
+  const [sales, setSales] = useState<DailySale[]>(initialSales as DailySale[]);
+  const [bakulRecords, setBakulRecords] = useState<BakulRecord[]>(initialBakulRecords as BakulRecord[]);
+  const [ops, setOps] = useState<OperationalRecord[]>(initialOperationalRecords as OperationalRecord[]);
+  const [items, setItems] = useState<ItemMaster[]>(initialItems as ItemMaster[]);
+  const [bakulMasters, setBakulMasters] = useState<BakulMaster[]>(initialBakulMasters as BakulMaster[]);
+  const [stockIn, setStockIn] = useState<StockInRecord[]>(initialStockIn as StockInRecord[]);
+  const [stockOut, setStockOut] = useState<StockOutRecord[]>(initialStockOut as StockOutRecord[]);
+  const [opsCategories, setOpsCategories] = useState<string[]>(initialOpsCategories as string[]);
+
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
 
-const reload = () => {
+  // Guard agar inisialisasi tidak berjalan dua kali.
+  const initStarted = useRef(false);
+
+  // Membangun dataset gabungan untuk dikirim ke server / dipakai aplikasi.
+  const state: AppDataSet = useMemo(
+    () => ({ sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories }),
+    [sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories]
+  );
+
+  // Satu-effect inisialisasi: tentukan sumber kebenaran.
+  // - Server punya data  -> pakai data server (sumber kebenaran).
+  // - Server kosong      -> seed data awal (demo) ke server.
+  // - Server tidak dapat diakses -> mode offline, pakai data lokal awal.
+  useEffect(() => {
+    if (!isClient || initStarted.current) return;
+    initStarted.current = true;
+
+    const initializeData = async () => {
+      setLoading(true);
+      setLoadError(null);
+      setSyncStatus("loading");
+      const serverData = await fetchAllFromServer();
+
+      if (serverData === null) {
+        // Jaringan / server bermasalah, aplikasi offline.
+        setSyncStatus("offline");
+        setLoading(false);
+        return;
+      }
+
+      if (hasAnyServerData(serverData)) {
+        // Server punya data -> sumber kebenaran.
+        setSales(serverData.sales ?? []);
+        setBakulRecords(serverData.bakulRecords ?? []);
+        setOps(serverData.ops ?? []);
+        setItems(serverData.items ?? []);
+        setBakulMasters(serverData.bakulMasters ?? []);
+        setStockIn(serverData.stockIn ?? []);
+        setStockOut(serverData.stockOut ?? []);
+        setOpsCategories(serverData.opsCategories ?? []);
+        setSyncStatus("saved");
+      } else {
+        // Server kosong. Seed dengan data awal (demo).
+        const demoData: LocalDataset = {
+          sales: initialSales as DailySale[],
+          bakulRecords: initialBakulRecords as BakulRecord[],
+          ops: initialOperationalRecords as OperationalRecord[],
+          items: initialItems as ItemMaster[],
+          bakulMasters: initialBakulMasters as BakulMaster[],
+          stockIn: initialStockIn as StockInRecord[],
+          stockOut: initialStockOut as StockOutRecord[],
+          opsCategories: initialOpsCategories as string[],
+        };
+        setSyncStatus("saving");
+        const success = await pushAllToServer(demoData);
+        setSyncStatus(success ? "saved" : "error");
+      }
+      setDataLoaded(true);
+      setLoading(false);
+    };
+
+    initializeData();
+  }, [isClient]);
+
+  // Simpan data ke server setiap kali data berubah (debounce).
+  // Tidak dibatasi hanya admin, sehingga perubahan dari mode user pun ter-sinkron.
+  useEffect(() => {
+    if (!isClient || !dataLoaded) return;
+    if (syncStatus === "loading" || syncStatus === "offline") return;
+
+    const dataset: LocalDataset = {
+      sales,
+      bakulRecords,
+      ops,
+      items,
+      bakulMasters,
+      stockIn,
+      stockOut,
+      opsCategories,
+    };
+
+    const timer = setTimeout(async () => {
+      setSyncStatus("saving");
+      const success = await pushAllToServer(dataset);
+      setSyncStatus(success ? "saved" : "error");
+    }, 800);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClient, dataLoaded, syncStatus === "offline", sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories]);
+
+// Tipe action yang didukung dispatch (kompatibel dengan pemakaian lama).
+  type ActionMap = {
+    SET_ALL_DATA: AppDataSet;
+    RESET_DATA: undefined;
+    SET_FIELD: { [K in keyof AppDataSet]: { field: K; value: AppDataSet[K] } }[keyof AppDataSet];
+    ADD: { [K in keyof AppDataSet]: { field: K; value: AppDataSet[K][0] } }[keyof AppDataSet];
+    UPDATE: {
+      [K in keyof AppDataSet]: { field: K; index: number; value: AppDataSet[K][0] };
+    }[keyof AppDataSet];
+    DELETE: { field: keyof AppDataSet; index: number };
+  };
+  type Action =
+    | {
+        [K in keyof ActionMap]: {
+          type: K;
+          payload: ActionMap[K];
+        };
+      }[keyof ActionMap]
+    | { type: "SET_ALL_DATA"; payload: AppDataSet }
+    | { type: "RESET_DATA"; payload?: undefined };
+
+  // CRUD dispatch yang update state individu.
+  const dispatch = useCallback((action: Action) => {
+    const field = action.type === "SET_FIELD" || action.type === "ADD" || action.type === "UPDATE" || action.type === "DELETE"
+      ? (action.payload as { field: keyof AppDataSet }).field
+      : undefined;
+
+    if (action.type === "SET_ALL_DATA") {
+      const data = action.payload as AppDataSet;
+      setSales(data.sales ?? []);
+      setBakulRecords(data.bakulRecords ?? []);
+      setOps(data.ops ?? []);
+      setItems(data.items ?? []);
+      setBakulMasters(data.bakulMasters ?? []);
+      setStockIn(data.stockIn ?? []);
+      setStockOut(data.stockOut ?? []);
+      setOpsCategories(data.opsCategories ?? []);
+      return;
+    }
+
+    if (action.type === "RESET_DATA") {
+      setSales(initialSales as DailySale[]);
+      setBakulRecords(initialBakulRecords as BakulRecord[]);
+      setOps(initialOperationalRecords as OperationalRecord[]);
+      setItems(initialItems as ItemMaster[]);
+      setBakulMasters(initialBakulMasters as BakulMaster[]);
+      setStockIn(initialStockIn as StockInRecord[]);
+      setStockOut(initialStockOut as StockOutRecord[]);
+      setOpsCategories(initialOpsCategories as string[]);
+      return;
+    }
+
+    if (!field) return;
+
+    const isArray = field !== "opsCategories";
+    if (!isArray) {
+      // opsCategories: string[]
+      if (action.type === "SET_FIELD") {
+        setOpsCategories((action.payload as { value: string[] }).value);
+      }
+      return;
+    }
+
+    if (action.type === "SET_FIELD") {
+      const value = (action.payload as { value: unknown }).value;
+      switch (field) {
+        case "sales": setSales(value as DailySale[]); break;
+        case "bakulRecords": setBakulRecords(value as BakulRecord[]); break;
+        case "ops": setOps(value as OperationalRecord[]); break;
+        case "items": setItems(value as ItemMaster[]); break;
+        case "bakulMasters": setBakulMasters(value as BakulMaster[]); break;
+        case "stockIn": setStockIn(value as StockInRecord[]); break;
+        case "stockOut": setStockOut(value as StockOutRecord[]); break;
+        default: break;
+      }
+      return;
+    }
+
+    if (action.type === "ADD") {
+      const value = (action.payload as { value: unknown }).value;
+      switch (field) {
+        case "sales": setSales((prev) => [value as DailySale, ...prev]); break;
+        case "bakulRecords": setBakulRecords((prev) => [value as BakulRecord, ...prev]); break;
+        case "ops": setOps((prev) => [value as OperationalRecord, ...prev]); break;
+        case "items": setItems((prev) => [value as ItemMaster, ...prev]); break;
+        case "bakulMasters": setBakulMasters((prev) => [value as BakulMaster, ...prev]); break;
+        case "stockIn": setStockIn((prev) => [value as StockInRecord, ...prev]); break;
+        case "stockOut": setStockOut((prev) => [value as StockOutRecord, ...prev]); break;
+        default: break;
+      }
+      return;
+    }
+
+    if (action.type === "UPDATE") {
+      const index = (action.payload as { index: number }).index;
+      const value = (action.payload as { value: unknown }).value;
+      switch (field) {
+        case "sales": setSales((prev) => prev.map((item, i) => (i === index ? value as DailySale : item))); break;
+        case "bakulRecords": setBakulRecords((prev) => prev.map((item, i) => (i === index ? value as BakulRecord : item))); break;
+        case "ops": setOps((prev) => prev.map((item, i) => (i === index ? value as OperationalRecord : item))); break;
+        case "items": setItems((prev) => prev.map((item, i) => (i === index ? value as ItemMaster : item))); break;
+        case "bakulMasters": setBakulMasters((prev) => prev.map((item, i) => (i === index ? value as BakulMaster : item))); break;
+        case "stockIn": setStockIn((prev) => prev.map((item, i) => (i === index ? value as StockInRecord : item))); break;
+        case "stockOut": setStockOut((prev) => prev.map((item, i) => (i === index ? value as StockOutRecord : item))); break;
+        default: break;
+      }
+      return;
+    }
+
+    if (action.type === "DELETE") {
+      const index = (action.payload as { index: number }).index;
+      switch (field) {
+        case "sales": setSales((prev) => prev.filter((_, i) => i !== index)); break;
+        case "bakulRecords": setBakulRecords((prev) => prev.filter((_, i) => i !== index)); break;
+        case "ops": setOps((prev) => prev.filter((_, i) => i !== index)); break;
+        case "items": setItems((prev) => prev.filter((_, i) => i !== index)); break;
+        case "bakulMasters": setBakulMasters((prev) => prev.filter((_, i) => i !== index)); break;
+        case "stockIn": setStockIn((prev) => prev.filter((_, i) => i !== index)); break;
+        case "stockOut": setStockOut((prev) => prev.filter((_, i) => i !== index)); break;
+        default: break;
+      }
+      return;
+    }
+  }, []);
+
+  // Muat ulang data dari server (full reload).
+  const reload = useCallback(() => {
     setLoading(true);
     setLoadError(null);
-    loadFromApi(initialState).then((data) => {
-      dispatch({ type: "SET_ALL_DATA", payload: data });
+    fetchAllFromServer().then((serverData) => {
+      if (serverData && hasAnyServerData(serverData)) {
+        setSales(serverData.sales ?? []);
+        setBakulRecords(serverData.bakulRecords ?? []);
+        setOps(serverData.ops ?? []);
+        setItems(serverData.items ?? []);
+        setBakulMasters(serverData.bakulMasters ?? []);
+        setStockIn(serverData.stockIn ?? []);
+        setStockOut(serverData.stockOut ?? []);
+        setOpsCategories(serverData.opsCategories ?? []);
+        setSyncStatus("saved");
+      } else {
+        setLoadError("Gagal memuat data dari server.");
+      }
       setDataLoaded(true);
       setLoading(false);
     }).catch(() => {
       setLoadError("Gagal memuat data dari server.");
       setLoading(false);
     });
-  };
+  }, []);
 
-  // Advance version for background sync (non-blocking, no spinner)
-  const silentReload = () => {
-    loadFromApi(initialState).then((data) => {
-      dispatch({ type: "SET_ALL_DATA", payload: data });
-    }).catch(() => {
-      // abaikan error di background polling
-    });
-  };
+  // Reset data: admin only, lalu re-seed server dengan data awal.
+  const handleResetData = useCallback(async () => {
+    setSales(initialSales as DailySale[]);
+    setBakulRecords(initialBakulRecords as BakulRecord[]);
+    setOps(initialOperationalRecords as OperationalRecord[]);
+    setItems(initialItems as ItemMaster[]);
+    setBakulMasters(initialBakulMasters as BakulMaster[]);
+    setStockIn(initialStockIn as StockInRecord[]);
+    setStockOut(initialStockOut as StockOutRecord[]);
+    setOpsCategories(initialOpsCategories as string[]);
 
-  // Load data from API on initial client-side render
-  useEffect(() => {
-    if (!isClient || dataLoaded) return;
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isClient, dataLoaded]);
-
-  // Save data to API on change, with debounce (hanya jika admin)
-  useEffect(() => {
-    if (!isClient || !dataLoaded) {
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      if (adminUnlocked) {
-        setSaveStatus("saving");
-        try {
-          const res = await fetch("/api/data", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(state),
-          });
-          if (!res.ok) {
-            throw new Error(`POST /api/data gagal: ${res.status}`);
-          }
-          setSaveStatus("saved");
-        } catch (err) {
-          console.error("Gagal menyimpan data ke backend:", err);
-          setSaveStatus("error");
-        }
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isClient, dataLoaded, adminUnlocked, state]);
-
-  // === Sinkronisasi data antar perangkat ===
-  // Polling berkala (setiap 10 detik) di latar belakang.
-  // Hanya dijalankan ketika tab aktif & tidak sedang menampilkan loading awal.
-  useEffect(() => {
-    if (!isClient || !dataLoaded || loading) return;
-
-const sync = () => {
-      if (document.visibilityState === "visible" && navigator.onLine) {
-        // Ambil data terbaru di latar belakang tanpa spinner.
-        // Catatan: polling ini hanya menimpa state lokal dengan data server.
-        // Jika admin sedang mengetik, perubahan akan tetap ter-save via debounce
-        // dan polling berikutnya akan mengambil hasil save tersebut.
-        silentReload();
-      }
-    };
-
-    const interval = setInterval(sync, 10000);
-    window.addEventListener("focus", sync);
-    document.addEventListener("visibilitychange", sync);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", sync);
-      document.removeEventListener("visibilitychange", sync);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isClient, dataLoaded, loading]);
-
-  // Reset data: admin only
-  const handleResetData = async () => {
-    if (!adminUnlocked) return;
-dispatch({ type: "RESET_DATA", payload: undefined });
+    setSyncStatus("saving");
     try {
       const res = await fetch("/api/data", { method: "DELETE" });
-      if (!res.ok) {
-        throw new Error(`DELETE /api/data gagal: ${res.status}`);
-      }
-    } catch (err) {
-      console.error("Gagal mereset data di backend:", err);
+      const json = (await res.json()) as { ok?: boolean };
+      const resetOk = json.ok === true;
+      const success = await pushAllToServer({
+        sales: initialSales as DailySale[],
+        bakulRecords: initialBakulRecords as BakulRecord[],
+        ops: initialOperationalRecords as OperationalRecord[],
+        items: initialItems as ItemMaster[],
+        bakulMasters: initialBakulMasters as BakulMaster[],
+        stockIn: initialStockIn as StockInRecord[],
+        stockOut: initialStockOut as StockOutRecord[],
+        opsCategories: initialOpsCategories as string[],
+      });
+      setSyncStatus(success ? "saved" : resetOk ? "saved" : "error");
+    } catch {
+      setSyncStatus("error");
     }
-  };
+  }, []);
 
   return {
     state,
@@ -218,7 +344,7 @@ dispatch({ type: "RESET_DATA", payload: undefined });
     isClient,
     loading,
     loadError,
-    saveStatus,
+    syncStatus,
     reload,
     handleResetData,
   };

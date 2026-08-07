@@ -13,9 +13,10 @@ import {
   Tab,
   Tabs,
 } from "@heroui/react";
-import { LockKeyhole, LogOut, ShieldCheck, Sparkles } from "lucide-react";
+import { CloudCog, CloudOff, Loader, LockKeyhole, LogOut, ShieldCheck, Sparkles } from "lucide-react";
 import { Key, useState } from "react";
 import { Role } from "@/types/finance";
+import type { SyncStatus } from "@/lib/sync";
 
 interface HeaderProps {
   stockOutCount: number;
@@ -27,6 +28,48 @@ interface HeaderProps {
   selectedMonth: string;
   availableMonths: string[];
   onMonthChange: (month: string) => void;
+  syncStatus: SyncStatus;
+}
+
+function SyncStatusIndicator({ status }: { status: SyncStatus }) {
+  const indicators = {
+    loading: {
+      icon: <Loader size={14} className="animate-spin" />,
+      text: "Memuat...",
+      color: "text-[#706858]",
+    },
+    saving: {
+      icon: <CloudCog size={14} className="animate-pulse" />,
+      text: "Menyimpan...",
+      color: "text-blue-600",
+    },
+    saved: {
+      icon: <ShieldCheck size={14} />,
+      text: "Tersimpan",
+      color: "text-green-600",
+    },
+    offline: {
+      icon: <CloudOff size={14} />,
+      text: "Offline",
+      color: "text-slate-500",
+    },
+    error: {
+      icon: <CloudOff size={14} />,
+      text: "Gagal",
+      color: "text-red-600",
+    },
+  };
+
+  const current = indicators[status];
+
+  return (
+    <div
+      className={`hidden items-center gap-1.5 rounded-lg bg-[#f0eadb] px-3 py-2 text-xs font-bold sm:flex ${current.color}`}
+    >
+      {current.icon}
+      <span className="hidden md:inline">{current.text}</span>
+    </div>
+  );
 }
 
 export function Header({
@@ -39,6 +82,7 @@ export function Header({
   selectedMonth,
   availableMonths,
   onMonthChange,
+  syncStatus,
 }: HeaderProps) {
 const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
@@ -98,6 +142,9 @@ const handleAdminSubmit = async (e: React.FormEvent) => {
         </div>
 
 <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
+          {/* Sync Status Indicator */}
+          <SyncStatusIndicator status={syncStatus} />
+
           {/* Month Selector */}
           {availableMonths.length > 0 && (
             <div className="w-full sm:w-auto sm:min-w-[160px]">
