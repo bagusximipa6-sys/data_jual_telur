@@ -14,7 +14,7 @@ import {
   Tab,
   Tabs,
 } from "@heroui/react";
-import { AlertCircle, Edit2, Plus, Search } from "lucide-react";
+import { AlertCircle, Edit2, Plus, Printer, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { rupiah, shortNumber, toNumber } from "@/lib/utils";
 import { BakulRecord, ItemMaster, StockOutRecord } from "@/types/finance";
@@ -156,7 +156,63 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
     return acc;
   }, {} as Record<string, number>);
 
-  const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
+const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
+
+  const handlePrintReceipt = (record: StockOutRecord) => {
+    const total = record.quantity * record.price;
+    const method = record.paymentMethod ?? "cash";
+    const methodLabel =
+      method === "cash" ? "Cash" : method === "transfer" ? "Transfer" : "Hutang";
+    const saleType = record.saleType ?? "eceran";
+
+    const win = window.open("", "_blank", "width=320,height=640");
+    if (!win) return;
+    win.document.write(`
+      <html>
+        <head>
+          <title>Struk Penjualan</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { width: 280px; margin: 0 auto; padding: 12px; font-family: 'Courier New', monospace; color: #000; font-size: 12px; }
+            .center { text-align: center; }
+            .title { font-size: 15px; font-weight: bold; margin-bottom: 2px; }
+            .sub { font-size: 10px; margin-bottom: 6px; }
+            .divider { border-top: 1px dashed #000; margin: 8px 0; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+            .b { font-weight: bold; }
+            .total { font-size: 14px; font-weight: bold; margin-top: 4px; }
+            .footer { text-align: center; font-size: 10px; margin-top: 10px; }
+            @media print { body { width: 80mm; } }
+          </style>
+        </head>
+        <body>
+          <div class="center">
+            <div class="title">BUKU KEUANGAN TELUR</div>
+            <div class="sub">Data Penjualan Telur</div>
+          </div>
+          <div class="divider"></div>
+          <div class="row"><span>No. Struk</span><span class="b">${record.id}</span></div>
+          <div class="row"><span>Tanggal</span><span>${record.date}</span></div>
+          <div class="row"><span>Pelanggan</span><span class="b">${record.bakulName}</span></div>
+          <div class="row"><span>Jenis</span><span>${saleType === "grosir" ? "Grosir" : "Eceran"}</span></div>
+          <div class="row"><span>Pembayaran</span><span>${methodLabel}</span></div>
+          <div class="divider"></div>
+          <div class="row"><span>${record.itemName}</span></div>
+          <div class="row"><span>&nbsp;&nbsp;${record.quantity} kg x ${rupiah(record.price)}</span><span>${rupiah(total)}</span></div>
+          <div class="divider"></div>
+          <div class="row total"><span>TOTAL</span><span>${rupiah(total)}</span></div>
+          <div class="divider"></div>
+          <div class="footer">
+            Terima kasih<br />
+            Barang yang sudah dibeli tidak dapat dikembalikan.
+          </div>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -423,7 +479,17 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
                       <span className="font-mono font-black text-[#e05234]">-{shortNumber(item.quantity)} kg</span>
                       <p className="text-[10px] text-[#706858] font-mono font-bold">{rupiah(item.price * item.quantity)}</p>
                     </div>
-                    <div className="flex gap-1">
+<div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        className="bg-[#e6f1ff] font-bold text-[#173a61] min-w-unit-12"
+                        startContent={<Printer size={14} />}
+                        onPress={() => handlePrintReceipt(item)}
+                        radius="sm"
+                      >
+                        Struk
+                      </Button>
                       <Button
                         size="sm"
                         variant="flat"

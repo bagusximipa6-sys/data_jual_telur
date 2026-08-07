@@ -8,7 +8,6 @@ import autoTable from "jspdf-autotable";
 import { getMonthLabel, rupiah, shortNumber } from "@/lib/utils";
 import {
   emptyPaymentBreakdown,
-  ItemMaster,
   OperationalRecord,
   PaymentBreakdown,
   PaymentMethod,
@@ -16,12 +15,13 @@ import {
   Role,
   SaleBreakdown,
   SaleType,
+  StockInRecord,
   StockOutRecord,
 } from "@/types/finance";
 
 interface FinancialReportTabProps {
   stockOut: StockOutRecord[];
-  items: ItemMaster[];
+  stockIn: StockInRecord[];
   ops: OperationalRecord[];
   role: Role;
 }
@@ -99,13 +99,14 @@ const mergePaymentBreakdown = (target: PaymentBreakdown, source: PaymentBreakdow
 
 const buildProfitLoss = (
   stockOut: StockOutRecord[],
-  items: ItemMaster[],
+  stockIn: StockInRecord[],
   ops: OperationalRecord[]
 ): ProfitLossSummary => {
-  // Map item name -> buyPrice from Master Barang
+  // Map item name -> buyPrice from latest Barang Masuk (stock in) record
   const buyPriceMap = new Map<string, number>();
-  for (const item of items) {
-    buyPriceMap.set(item.name.toLowerCase(), item.buyPrice);
+  const sortedStockIn = [...stockIn].sort((a, b) => a.date.localeCompare(b.date));
+  for (const record of sortedStockIn) {
+    buyPriceMap.set(record.itemName.toLowerCase(), record.buyPrice);
   }
 
   // Map operational expenses by date
@@ -437,13 +438,13 @@ const exportProfitPDF = (summary: ProfitLossSummary) => {
   doc.save("laporan_laba_rugi.pdf");
 };
 
-export function FinancialReportTab({ stockOut, items, ops, role }: FinancialReportTabProps) {
+export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialReportTabProps) {
   const [dateFilter, setDateFilter] = useState("");
   const isAdmin = role === "admin";
 
   const summary = useMemo(
-    () => buildProfitLoss(stockOut, items, ops),
-    [stockOut, items, ops]
+    () => buildProfitLoss(stockOut, stockIn, ops),
+    [stockOut, stockIn, ops]
   );
 
   const filteredDaily = useMemo(() => {
@@ -762,8 +763,9 @@ export function FinancialReportTab({ stockOut, items, ops, role }: FinancialRepo
       <div className="flex items-start gap-2 rounded-2xl border border-[#191712]/10 bg-white p-4 text-xs text-[#706858]">
         <Download size={15} className="mt-0.5 shrink-0" />
         <p>
-          <strong>Rumus:</strong> Pendapatan Harian = (Total Stok Keluar × Harga Jual) − (Total Stok Keluar × Harga
-          Beli). Harga Beli diambil dari Master Barang; jika barang belum terdaftar di Master Barang, modal dihitung Rp0.
+<strong>Rumus:</strong> Pendapatan Harian = (Total Stok Keluar × Harga Jual) − (Total Stok Keluar × Harga
+          Beli). Harga Beli diambil dari transaksi Barang Masuk terakhir untuk barang tersebut; jika belum ada data
+          Barang Masuk, modal dihitung Rp0.
         </p>
       </div>
     </div>

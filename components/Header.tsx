@@ -22,7 +22,7 @@ interface HeaderProps {
   role: Role;
   adminUnlocked: boolean;
   onRoleChange: (key: Key) => void;
-  onUnlockAdmin: (password: string) => boolean;
+  onUnlockAdmin: (password: string) => Promise<boolean> | boolean;
   onLogoutAdmin: () => void;
   selectedMonth: string;
   availableMonths: string[];
@@ -40,9 +40,10 @@ export function Header({
   availableMonths,
   onMonthChange,
 }: HeaderProps) {
-  const [showAdminModal, setShowAdminModal] = useState(false);
+const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
   const [adminError, setAdminError] = useState("");
+  const [adminSubmitting, setAdminSubmitting] = useState(false);
 
   const handleTabsChange = (key: Key) => {
     const nextRole = String(key) as Role;
@@ -54,15 +55,23 @@ export function Header({
     onRoleChange(key);
   };
 
-  const handleAdminSubmit = (e: React.FormEvent) => {
+const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = onUnlockAdmin(adminPassword);
-    if (success) {
-      setShowAdminModal(false);
-      setAdminPassword("");
-      setAdminError("");
-    } else {
-      setAdminError("Password admin tidak cocok");
+    setAdminSubmitting(true);
+    setAdminError("");
+    try {
+      const success = await onUnlockAdmin(adminPassword);
+      if (success) {
+        setShowAdminModal(false);
+        setAdminPassword("");
+        setAdminError("");
+      } else {
+        setAdminError("Password admin tidak cocok");
+      }
+    } catch {
+      setAdminError("Terjadi kesalahan saat verifikasi. Coba lagi.");
+    } finally {
+      setAdminSubmitting(false);
     }
   };
 
@@ -174,7 +183,12 @@ export function Header({
                 <Button variant="flat" radius="sm" onPress={() => setShowAdminModal(false)}>
                   Batal
                 </Button>
-                <Button type="submit" className="bg-[#191712] font-bold text-white" radius="sm">
+<Button
+                  type="submit"
+                  className="bg-[#191712] font-bold text-white"
+                  radius="sm"
+                  isLoading={adminSubmitting}
+                >
                   Buka Admin
                 </Button>
               </div>

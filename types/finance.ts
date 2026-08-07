@@ -32,7 +32,6 @@ export type OperationalRecord = {
 export type ItemMaster = {
   id: string;
   name: string;
-  buyPrice: number;
   sellPrice: number;
 };
 
@@ -47,6 +46,7 @@ export type StockInRecord = {
   date: string;
   itemName: string;
   quantity: number;
+  buyPrice: number;
 };
 
 export type StockOutRecord = {

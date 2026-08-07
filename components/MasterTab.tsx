@@ -87,23 +87,22 @@ export function MasterTab({
   const isAdmin = role === "admin";
 
   // === Form State: Master Barang ===
-  const [itemForm, setItemForm] = useState({ name: "", buyPrice: "", sellPrice: "" });
+const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
   const [itemEditIndex, setItemEditIndex] = useState<number | null>(null);
   const [itemDeleteIndex, setItemDeleteIndex] = useState<number | null>(null);
 
   const resetItemForm = () => {
-    setItemForm({ name: "", buyPrice: "", sellPrice: "" });
+    setItemForm({ name: "", sellPrice: "" });
     setItemEditIndex(null);
   };
 
   const handleSubmitItem = (e: React.FormEvent) => {
     e.preventDefault();
     const name = itemForm.name.trim();
-    const buyPrice = toNumber(itemForm.buyPrice);
     const sellPrice = toNumber(itemForm.sellPrice);
-    if (!name || buyPrice <= 0 || sellPrice <= 0) return;
+    if (!name || sellPrice <= 0) return;
 
-    const record: ItemMaster = { id: uid(), name, buyPrice, sellPrice };
+    const record: ItemMaster = { id: uid(), name, sellPrice };
     if (itemEditIndex !== null) {
       onUpdateItem(itemEditIndex, record);
     } else {
@@ -114,7 +113,7 @@ export function MasterTab({
 
   const handleStartEditItem = (item: ItemMaster, index: number) => {
     setItemEditIndex(index);
-    setItemForm({ name: item.name, buyPrice: String(item.buyPrice), sellPrice: String(item.sellPrice) });
+    setItemForm({ name: item.name, sellPrice: String(item.sellPrice) });
   };
 
   // === Form State: Master Pelanggan / Bakul ===
@@ -190,8 +189,8 @@ export function MasterTab({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-black text-[#191712]">Master Barang & Harga</h2>
-            <p className="text-xs text-[#706858]">
-              Daftar nama barang beserta Harga Beli dan Harga Jual. Khusus Owner (Admin).
+<p className="text-xs text-[#706858]">
+              Daftar nama barang beserta Harga Jual. Khusus Owner (Admin). Harga Beli dicatat di menu Barang Masuk.
             </p>
           </div>
           <Chip size="sm" className="bg-[#e6f1ff] font-bold text-[#173a61]">
@@ -206,7 +205,7 @@ export function MasterTab({
               <h3 className="font-black text-sm text-[#191712]">
                 {itemEditIndex === null ? "Tambah Barang Baru" : "Edit Barang"}
               </h3>
-              <Input
+<Input
                 label="Nama Barang"
                 labelPlacement="outside"
                 placeholder="cth. Telur Ayam"
@@ -215,35 +214,15 @@ export function MasterTab({
                 radius="sm"
                 required
               />
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  label="Harga Beli /kg (Rp)"
-                  labelPlacement="outside"
-                  placeholder="cth. 21000"
-                  value={itemForm.buyPrice}
-                  onValueChange={(buyPrice) => setItemForm((prev) => ({ ...prev, buyPrice }))}
-                  radius="sm"
-                  required
-                />
-                <Input
-                  label="Harga Jual /kg (Rp)"
-                  labelPlacement="outside"
-                  placeholder="cth. 23000"
-                  value={itemForm.sellPrice}
-                  onValueChange={(sellPrice) => setItemForm((prev) => ({ ...prev, sellPrice }))}
-                  radius="sm"
-                  required
-                />
-              </div>
-
-              {itemForm.name && toNumber(itemForm.buyPrice) > 0 && toNumber(itemForm.sellPrice) > 0 && (
-                <div className="rounded-lg bg-white border border-[#191712]/10 px-3 py-2 text-xs flex justify-between">
-                  <span className="font-bold text-[#706858]">Estimasi Laba</span>
-                  <span className="font-mono font-black text-[#1f8f5f]">
-                    {rupiah(toNumber(itemForm.sellPrice) - toNumber(itemForm.buyPrice))}
-                  </span>
-                </div>
-              )}
+              <Input
+                label="Harga Jual /kg (Rp)"
+                labelPlacement="outside"
+                placeholder="cth. 23000"
+                value={itemForm.sellPrice}
+                onValueChange={(sellPrice) => setItemForm((prev) => ({ ...prev, sellPrice }))}
+                radius="sm"
+                required
+              />
 
               <div className="flex gap-2">
                 <Button
@@ -270,9 +249,7 @@ export function MasterTab({
                   Belum ada barang terdaftar.
                 </div>
               ) : (
-                items.map((item, index) => {
-                  const margin = item.sellPrice - item.buyPrice;
-                  const marginPct = item.buyPrice > 0 ? Math.round((margin / item.buyPrice) * 100) : 0;
+items.map((item, index) => {
                   return (
                     <Card key={item.id} shadow="none" radius="sm" className="border border-[#191712]/10 bg-white">
                       <CardBody className="gap-2 p-4">
@@ -281,15 +258,8 @@ export function MasterTab({
                             <h3 className="font-black text-[#191712]">{item.name}</h3>
                             <p className="text-[10px] text-[#706858] uppercase font-bold">Master Barang</p>
                           </div>
-                          <Chip size="sm" className="bg-[#e6f1ff] font-bold text-[#173a61]">
-                            +{marginPct}%
-                          </Chip>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="rounded-lg bg-[#f7f5ef] p-2">
-                            <span className="text-[10px] text-[#706858] uppercase block">Harga Beli /kg</span>
-                            <span className="font-bold">{rupiah(item.buyPrice)}</span>
-                          </div>
+                        <div className="grid grid-cols-1 gap-2 text-xs">
                           <div className="rounded-lg bg-[#f7f5ef] p-2">
                             <span className="text-[10px] text-[#706858] uppercase block">Harga Jual /kg</span>
                             <span className="font-bold text-[#1f8f5f]">{rupiah(item.sellPrice)}</span>

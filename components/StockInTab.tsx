@@ -14,7 +14,7 @@ import {
 } from "@heroui/react";
 import { AlertCircle, Edit2, Lock, Plus, Search } from "lucide-react";
 import { useState } from "react";
-import { shortNumber, toNumber } from "@/lib/utils";
+import { rupiah, shortNumber, toNumber } from "@/lib/utils";
 import { Role, StockInRecord } from "@/types/finance";
 
 interface StockInTabProps {
@@ -43,10 +43,11 @@ export function StockInTab({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
 
-  const [form, setForm] = useState({
+const [form, setForm] = useState({
     date: DEFAULT_DATE,
     itemName: itemNames[0] || "",
     quantity: "",
+    buyPrice: "",
   });
 
   const isAdmin = role === "admin";
@@ -57,6 +58,7 @@ export function StockInTab({
       date: item.date,
       itemName: item.itemName,
       quantity: String(item.quantity),
+      buyPrice: String(item.buyPrice),
     });
   };
 
@@ -66,6 +68,7 @@ export function StockInTab({
       date: DEFAULT_DATE,
       itemName: itemNames[0] || "",
       quantity: "",
+      buyPrice: "",
     });
   };
 
@@ -73,13 +76,15 @@ export function StockInTab({
     e.preventDefault();
     const itemName = form.itemName.trim();
     const quantity = toNumber(form.quantity);
-    if (!itemName || !quantity) return;
+    const buyPrice = toNumber(form.buyPrice);
+    if (!itemName || !quantity || !buyPrice) return;
 
     const record: StockInRecord = {
       id: editingIndex !== null ? stockIn[editingIndex].id : nextId(),
       date: form.date,
       itemName,
       quantity,
+      buyPrice,
     };
 
     if (editingIndex !== null) {
@@ -155,7 +160,7 @@ export function StockInTab({
               )}
             </div>
 
-            <div className="space-y-1">
+<div className="space-y-1">
               <label className="text-xs font-semibold text-[#191712]">Stok Masuk (kg)</label>
               <Input
                 labelPlacement="outside"
@@ -165,6 +170,19 @@ export function StockInTab({
                 radius="sm"
                 required
                 endContent={<span className="text-xs font-bold text-[#706858]">kg</span>}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-[#191712]">Harga Beli /kg (Rp)</label>
+              <Input
+                labelPlacement="outside"
+                placeholder="cth. 21000"
+                value={form.buyPrice}
+                onValueChange={(buyPrice) => setForm((prev) => ({ ...prev, buyPrice }))}
+                radius="sm"
+                required
+                startContent={<span className="text-xs font-bold text-[#706858]">Rp</span>}
               />
             </div>
 
@@ -246,9 +264,11 @@ export function StockInTab({
                   className="border border-[#191712]/10 bg-white transition-all hover:border-[#191712]/30"
                 >
                   <CardBody className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
+<div>
                       <h3 className="font-black text-[#191712]">{item.itemName}</h3>
-                      <p className="text-xs text-[#706858] font-medium">{item.date}</p>
+                      <p className="text-xs text-[#706858] font-medium">
+                        {item.date} • Harga Beli {rupiah(item.buyPrice)} /kg
+                      </p>
                     </div>
                     <div className="flex items-center gap-4 justify-between sm:justify-end">
                       <span className="font-mono font-black text-[#1f8f5f]">+{shortNumber(item.quantity)} kg</span>

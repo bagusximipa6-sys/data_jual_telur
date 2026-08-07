@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import type { Key } from "react";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { BakulTab } from "@/components/BakulTab";
 import { FinancialReportTab } from "@/components/FinancialReportTab";
@@ -27,131 +27,80 @@ import { MetricCard } from "@/components/MetricCard";
 import { OpsTab } from "@/components/OpsTab";
 import { StockInTab } from "@/components/StockInTab";
 import { StockOutTab } from "@/components/StockOutTab";
+import { useAppData, type AppDataSet } from "@/hooks/useAppData";
+import { useAuth } from "@/hooks/useAuth";
 import { rupiah, shortNumber, unique } from "@/lib/utils";
 import {
   BakulMaster,
   BakulRecord,
-  DailySale,
   ItemMaster,
   OperationalRecord,
-  Role,
   StockInRecord,
   StockOutRecord,
 } from "@/types/finance";
-import {
-  initialBakulMasters,
-  initialBakulRecords,
-  initialItems,
-  initialOperationalRecords,
-  initialOpsCategories,
-  initialSales,
-  initialStockIn,
-  initialStockOut,
-} from "./rpa-data";
-
-const SALES_KEY = "finance_book_rpa_sales_v1";
-const BAKUL_KEY = "finance_book_rpa_bakul_v1";
-const OPS_KEY = "finance_book_rpa_ops_v1";
-const ITEMS_KEY = "finance_book_rpa_items_v1";
-const BAKUL_MASTERS_KEY = "finance_book_rpa_bakul_masters_v1";
-const STOCK_IN_KEY = "finance_book_rpa_stock_in_v1";
-const STOCK_OUT_KEY = "finance_book_rpa_stock_out_v1";
-const OPS_CATEGORIES_KEY = "finance_book_rpa_ops_categories_v1";
-const ADMIN_PASSWORD = "jeko2026";
-
-function loadFromStorage<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const saved = localStorage.getItem(key);
-    return saved ? (JSON.parse(saved) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function subscribeToClient() {
-  return () => {};
-}
 
 export default function Home() {
-  const isClient = useSyncExternalStore(subscribeToClient, () => true, () => false);
-  const [menu, setMenu] = useState("dashboard");
-  const [role, setRole] = useState<Role>("user");
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
+const { state, dispatch, dataLoaded, isClient, loading, loadError, saveStatus, reload, handleResetData } =
+    useAppData();
+  const { sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories } = state;
+  const { role, adminUnlocked, handleUnlockAdmin, handleLogoutAdmin, handleRoleChange } = useAuth();
 
-  const [sales, setSales] = useState<DailySale[]>(() =>
-    loadFromStorage<DailySale[]>(SALES_KEY, initialSales as DailySale[])
-  );
-  const [bakulRecords, setBakulRecords] = useState<BakulRecord[]>(() =>
-    loadFromStorage<BakulRecord[]>(BAKUL_KEY, initialBakulRecords as BakulRecord[])
-  );
-  const [ops, setOps] = useState<OperationalRecord[]>(() =>
-    loadFromStorage<OperationalRecord[]>(OPS_KEY, initialOperationalRecords as OperationalRecord[])
-  );
-  const [items, setItems] = useState<ItemMaster[]>(() =>
-    loadFromStorage<ItemMaster[]>(ITEMS_KEY, initialItems as ItemMaster[])
-  );
-  const [bakulMasters, setBakulMasters] = useState<BakulMaster[]>(() =>
-    loadFromStorage<BakulMaster[]>(BAKUL_MASTERS_KEY, initialBakulMasters as BakulMaster[])
-  );
-  const [stockIn, setStockIn] = useState<StockInRecord[]>(() =>
-    loadFromStorage<StockInRecord[]>(STOCK_IN_KEY, initialStockIn as StockInRecord[])
-  );
-const [stockOut, setStockOut] = useState<StockOutRecord[]>(() =>
-    loadFromStorage<StockOutRecord[]>(STOCK_OUT_KEY, initialStockOut as StockOutRecord[])
-  );
-  const [opsCategories, setOpsCategories] = useState<string[]>(() =>
-    loadFromStorage<string[]>(OPS_CATEGORIES_KEY, initialOpsCategories as string[])
-  );
+  const [menu, setMenu] = useState("dashboard");
+
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [reportDate, setReportDate] = useState<string>(() => {
-    const latest = [...initialStockOut]
+    const latest = [...stockOut]
       .map((r) => r.date)
       .sort()
       .reverse()[0];
     return latest || new Date().toISOString().slice(0, 10);
   });
 
-  // Save to LocalStorage on changes (only on client)
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(SALES_KEY, JSON.stringify(sales));
-  }, [sales, isClient]);
+  const menuGroups = [
+    {
+      title: "Laporan",
+      items: [
+        { key: "dashboard", label: "Laporan Harian", icon: ClipboardList, adminOnly: false },
+        { key: "laporan", label: "Laba & Rugi", icon: FileBarChart, adminOnly: true },
+      ],
+    },
+    {
+      title: "Transaksi",
+      items: [
+        { key: "stockin", label: "Barang Masuk", icon: PackagePlus, adminOnly: true },
+        { key: "stockout", label: "Barang Keluar", icon: Package, adminOnly: false },
+        { key: "ops", label: "Operasional", icon: HandCoins, adminOnly: true },
+      ],
+    },
+    {
+      title: "Data & Pengaturan",
+      items: [
+        { key: "bakul", label: "Piutang Bakul", icon: Users, adminOnly: false },
+        { key: "master", label: "Master & Data", icon: Database, adminOnly: false },
+      ],
+    },
+  ];
 
+  // When switching to user mode, reset to a visible menu if currently on a locked one
   useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(BAKUL_KEY, JSON.stringify(bakulRecords));
-  }, [bakulRecords, isClient]);
+    if (role === "user") {
+      const allMenus = menuGroups.flatMap((g) => g.items);
+      const lockedKeys = new Set(allMenus.filter((m) => m.adminOnly).map((m) => m.key));
+      if (lockedKeys.has(menu)) {
+        setMenu("dashboard");
+      }
+    }
+  }, [role, menu, menuGroups]);
 
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(OPS_KEY, JSON.stringify(ops));
-  }, [ops, isClient]);
-
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
-  }, [items, isClient]);
-
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(BAKUL_MASTERS_KEY, JSON.stringify(bakulMasters));
-  }, [bakulMasters, isClient]);
-
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(STOCK_IN_KEY, JSON.stringify(stockIn));
-  }, [stockIn, isClient]);
-
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(STOCK_OUT_KEY, JSON.stringify(stockOut));
-  }, [stockOut, isClient]);
-
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(OPS_CATEGORIES_KEY, JSON.stringify(opsCategories));
-  }, [opsCategories, isClient]);
+  // Filter menu yang terlihat berdasarkan role (admin/user)
+  const visibleMenuGroups = useMemo(() => {
+    return menuGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => role === "admin" || !item.adminOnly),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [role, menuGroups]);
 
   // Extract available months for dropdown
   const availableMonths = useMemo(() => {
@@ -260,163 +209,99 @@ const bakulNames = useMemo(() => unique(bakulMasters.map((item) => item.name)), 
   );
 
   // Handlers
-  const handleUnlockAdmin = (password: string) => {
-    if (password === ADMIN_PASSWORD) {
-      setAdminUnlocked(true);
-      setRole("admin");
-      return true;
-    }
-    return false;
-  };
-
-  const handleLogoutAdmin = () => {
-    setAdminUnlocked(false);
-    setRole("user");
-  };
-
-  const handleRoleChange = (key: Key) => {
-    const nextRole = String(key) as Role;
-    if (nextRole === "admin" && !adminUnlocked) {
-      return;
-    }
-    setRole(nextRole);
-  };
-
   // CRUD Bakul
   const handleAddBakul = (newRecord: BakulRecord) => {
-    setBakulRecords((prev) => [newRecord, ...prev]);
+    dispatch({ type: "ADD", payload: { field: "bakulRecords", value: newRecord } });
   };
   const handleUpdateBakul = (index: number, updatedRecord: BakulRecord) => {
-    setBakulRecords((prev) => prev.map((item, i) => (i === index ? updatedRecord : item)));
+    dispatch({ type: "UPDATE", payload: { field: "bakulRecords", index, value: updatedRecord } });
   };
   const handleDeleteBakul = (index: number) => {
-    setBakulRecords((prev) => prev.filter((_, i) => i !== index));
+    dispatch({ type: "DELETE", payload: { field: "bakulRecords", index } });
   };
 
   // CRUD Master Barang
   const handleAddItem = (newItem: ItemMaster) => {
-    setItems((prev) => [newItem, ...prev]);
+    dispatch({ type: "ADD", payload: { field: "items", value: newItem } });
   };
   const handleUpdateItem = (index: number, updatedItem: ItemMaster) => {
-    setItems((prev) => prev.map((item, i) => (i === index ? updatedItem : item)));
+    dispatch({ type: "UPDATE", payload: { field: "items", index, value: updatedItem } });
   };
   const handleDeleteItem = (index: number) => {
-    setItems((prev) => prev.filter((_, i) => i !== index));
+    dispatch({ type: "DELETE", payload: { field: "items", index } });
   };
 
   // CRUD Master Pelanggan / Bakul
   const handleAddBakulMaster = (newMaster: BakulMaster) => {
-    setBakulMasters((prev) => [newMaster, ...prev]);
+    dispatch({ type: "ADD", payload: { field: "bakulMasters", value: newMaster } });
   };
   const handleUpdateBakulMaster = (index: number, updatedMaster: BakulMaster) => {
-    setBakulMasters((prev) => prev.map((item, i) => (i === index ? updatedMaster : item)));
+    dispatch({ type: "UPDATE", payload: { field: "bakulMasters", index, value: updatedMaster } });
   };
   const handleDeleteBakulMaster = (index: number) => {
-    setBakulMasters((prev) => prev.filter((_, i) => i !== index));
+    dispatch({ type: "DELETE", payload: { field: "bakulMasters", index } });
   };
 
   // CRUD Transaksi Barang Masuk
   const handleAddStockIn = (record: StockInRecord) => {
-    setStockIn((prev) => [record, ...prev]);
+    dispatch({ type: "ADD", payload: { field: "stockIn", value: record } });
   };
   const handleUpdateStockIn = (index: number, record: StockInRecord) => {
-    setStockIn((prev) => prev.map((item, i) => (i === index ? record : item)));
+    dispatch({ type: "UPDATE", payload: { field: "stockIn", index, value: record } });
   };
   const handleDeleteStockIn = (index: number) => {
-    setStockIn((prev) => prev.filter((_, i) => i !== index));
+    dispatch({ type: "DELETE", payload: { field: "stockIn", index } });
   };
 
 // CRUD Transaksi Barang Keluar / Penjualan
   const handleAddStockOut = (record: StockOutRecord) => {
-    setStockOut((prev) => [record, ...prev]);
+    dispatch({ type: "ADD", payload: { field: "stockOut", value: record } });
   };
   const handleUpdateStockOut = (index: number, record: StockOutRecord) => {
-    setStockOut((prev) => prev.map((item, i) => (i === index ? record : item)));
+    dispatch({ type: "UPDATE", payload: { field: "stockOut", index, value: record } });
   };
   const handleDeleteStockOut = (index: number) => {
-    setStockOut((prev) => prev.filter((_, i) => i !== index));
+    dispatch({ type: "DELETE", payload: { field: "stockOut", index } });
   };
 
   // CRUD Biaya Operasional
   const handleAddOps = (record: OperationalRecord) => {
-    setOps((prev) => [record, ...prev]);
+    dispatch({ type: "ADD", payload: { field: "ops", value: record } });
   };
   const handleUpdateOps = (index: number, record: OperationalRecord) => {
-    setOps((prev) => prev.map((item, i) => (i === index ? record : item)));
+    dispatch({ type: "UPDATE", payload: { field: "ops", index, value: record } });
   };
   const handleDeleteOps = (index: number) => {
-    setOps((prev) => prev.filter((_, i) => i !== index));
+    dispatch({ type: "DELETE", payload: { field: "ops", index } });
   };
 
   // CRUD Master Kategori Operasional
   const handleAddOpsCategory = (category: string) => {
     const trimmed = category.trim();
     if (!trimmed) return;
-    setOpsCategories((prev) =>
-      prev.some((c) => c.toLowerCase() === trimmed.toLowerCase())
-        ? prev
-        : [...prev, trimmed]
-    );
+    if (!opsCategories.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      dispatch({ type: "SET_FIELD", payload: { field: "opsCategories", value: [...opsCategories, trimmed] } });
+    }
   };
   const handleDeleteOpsCategory = (category: string) => {
-    setOpsCategories((prev) => prev.filter((c) => c !== category));
+    dispatch({
+      type: "SET_FIELD",
+      payload: { field: "opsCategories", value: opsCategories.filter((c) => c !== category) },
+    });
   };
 
 // JSON Import & Reset
-  const handleImportData = (data: {
-    sales: DailySale[];
-    bakulRecords: BakulRecord[];
-    ops: OperationalRecord[];
-    items?: ItemMaster[];
-    bakulMasters?: BakulMaster[];
-    stockIn?: StockInRecord[];
-    stockOut?: StockOutRecord[];
-    opsCategories?: string[];
-  }) => {
-    setSales(data.sales);
-    setBakulRecords(data.bakulRecords);
-    setOps(data.ops);
-    if (data.items) setItems(data.items);
-    if (data.bakulMasters) setBakulMasters(data.bakulMasters);
-    if (data.stockIn) setStockIn(data.stockIn);
-    if (data.stockOut) setStockOut(data.stockOut);
-    if (data.opsCategories && data.opsCategories.length > 0) setOpsCategories(data.opsCategories);
+  const handleImportData = (data: Partial<AppDataSet>) => {
+    const fullData = { ...state, ...data };
+    dispatch({ type: "SET_ALL_DATA", payload: fullData });
   };
 
-  const handleResetData = () => {
-    setSales(initialSales as DailySale[]);
-    setBakulRecords(initialBakulRecords as BakulRecord[]);
-    setOps(initialOperationalRecords as OperationalRecord[]);
-    setItems(initialItems as ItemMaster[]);
-    setBakulMasters(initialBakulMasters as BakulMaster[]);
-    setStockIn(initialStockIn as StockInRecord[]);
-    setStockOut(initialStockOut as StockOutRecord[]);
-    setOpsCategories(initialOpsCategories as string[]);
-    localStorage.removeItem(SALES_KEY);
-    localStorage.removeItem(BAKUL_KEY);
-    localStorage.removeItem(OPS_KEY);
-    localStorage.removeItem(ITEMS_KEY);
-    localStorage.removeItem(BAKUL_MASTERS_KEY);
-    localStorage.removeItem(STOCK_IN_KEY);
-    localStorage.removeItem(STOCK_OUT_KEY);
-    localStorage.removeItem(OPS_CATEGORIES_KEY);
-  };
-
-const menus = [
-    { key: "dashboard", label: "Laporan Harian", icon: ClipboardList },
-    { key: "stockin", label: "Barang Masuk", icon: PackagePlus },
-    { key: "stockout", label: "Barang Keluar", icon: Package },
-    { key: "ops", label: "Operasional", icon: HandCoins },
-    { key: "bakul", label: "Piutang Bakul", icon: Users },
-    { key: "laporan", label: "Laba & Rugi", icon: FileBarChart },
-    { key: "master", label: "Master & Cadangan", icon: Database },
-  ];
-
-  if (!isClient) {
+if (!isClient || loading) {
     return (
       <main className="min-h-screen bg-[#f8f7f2]">
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
           <div className="h-24 animate-pulse rounded-2xl bg-white shadow-sm" />
+          <p className="mt-4 text-center text-sm text-[#706858]">Memuat data dari server…</p>
         </div>
       </main>
     );
@@ -424,6 +309,19 @@ const menus = [
 
   return (
     <main className="min-h-screen bg-[#f8f7f2] text-[#191712]">
+      {/* Tampilkan banner error saat gagal memuat */}
+      {loadError && (
+        <div className="bg-[#ffe2d8] border-b border-[#8f321a]/20 px-4 py-3 text-sm font-bold text-[#8f321a] flex flex-wrap items-center justify-between gap-2">
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={reload}
+            className="rounded-lg bg-[#8f321a] px-3 py-1 text-xs font-bold text-white"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      )}
       {/* Header Bar */}
       <Header
         stockOutCount={stockOut.length}
@@ -439,32 +337,40 @@ const menus = [
 
       {/* Main Container */}
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
-{/* Navigation Tabs */}
+        {/* Navigation Tabs */}
         <div className="rounded-2xl bg-white/70 p-2 shadow-sm backdrop-blur-sm border border-[#191712]/5">
-          <nav className="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:gap-2">
-            {menus.map(({ key, label, icon: Icon }) => {
-              const active = menu === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setMenu(key)}
-                  className={`group flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2.5 text-center transition-all sm:flex-row sm:px-3 sm:py-2 ${
-                    active
-                      ? "bg-[#191712] text-white shadow-md"
-                      : "bg-[#f7f5ef] text-[#706858] hover:bg-[#f0eadb] hover:text-[#191712]"
-                  }`}
-                >
-                  <Icon
-                    size={18}
-                    className={`shrink-0 ${active ? "text-[#d9ff67]" : "text-[#706858] group-hover:text-[#191712]"}`}
-                  />
-                  <span className="text-[10px] font-bold leading-tight sm:text-[11px] sm:font-semibold">
-                    {label}
-                  </span>
-                </button>
-              );
-            })}
+          <nav className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
+            {visibleMenuGroups.map((group) => (
+              <div key={group.title} className="flex items-start gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+                  {group.items.map(({ key, label, icon: Icon }) => {
+                    const active = menu === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setMenu(key)}
+                        className={`group flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2.5 text-center transition-all sm:flex-row sm:px-3 sm:py-2 w-[72px] sm:w-auto ${
+                          active
+                            ? "bg-[#191712] text-white shadow-md"
+                            : "bg-[#f7f5ef] text-[#706858] hover:bg-[#f0eadb] hover:text-[#191712]"
+                        }`}
+                      >
+                        <Icon
+                          size={18}
+                          className={`shrink-0 ${
+                            active ? "text-[#d9ff67]" : "text-[#706858] group-hover:text-[#191712]"
+                          }`}
+                        />
+                        <span className="text-[10px] font-bold leading-tight sm:text-[11px] sm:font-semibold">
+                          {label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </div>
 
@@ -730,8 +636,8 @@ const menus = [
             />
           )}
 
-          {menu === "laporan" && (
-            <FinancialReportTab stockOut={stockOut} items={items} ops={ops} role={role} />
+{menu === "laporan" && (
+            <FinancialReportTab stockOut={stockOut} stockIn={stockIn} ops={ops} role={role} />
           )}
 
           {menu === "master" && (
@@ -763,4 +669,3 @@ const menus = [
     </main>
   );
 }
-
