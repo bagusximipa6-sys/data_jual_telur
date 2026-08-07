@@ -616,7 +616,7 @@ function NewOpsCategoryForm({ onAdd }: { onAdd: (category: string) => void }) {
     const trimmed = value.trim();
     if (!trimmed) return;
     onAdd(trimmed);
-    setValue("");
+    setValue(""); // Reset input value after adding
   };
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-[#191712]/10 bg-[#f7f5ef] p-4">
@@ -638,4 +638,3 @@ function NewOpsCategoryForm({ onAdd }: { onAdd: (category: string) => void }) {
     </form>
   );
 }
-

@@ -45,11 +45,11 @@ type ActionMap = {
 };
 
 type Action = {
-  [Key in keyof ActionMap]: {
-    type: Key;
-    payload: ActionMap[Key];
+  [K in keyof ActionMap]: {
+    type: K;
+    payload: ActionMap[K];
   };
-}[keyof ActionMap];
+}[keyof ActionMap] | { type: "RESET_DATA"; payload?: undefined };
 
 const initialState: AppDataSet = {
   sales: initialSales as DailySale[],
@@ -69,14 +69,14 @@ function dataReducer(state: AppDataSet, action: Action): AppDataSet {
     case "SET_FIELD":
       return { ...state, [action.payload.field]: action.payload.value };
     case "ADD":
-      return { ...state, [action.payload.field]: [action.payload.value, ...(state[action.payload.field] as any[])] };
+      return { ...state, [action.payload.field]: [action.payload.value, ...(state[action.payload.field] as unknown[])] };
     case "UPDATE": {
-      const list = [...(state[action.payload.field] as any[])];
+      const list = [...(state[action.payload.field] as unknown[])];
       list[action.payload.index] = action.payload.value;
       return { ...state, [action.payload.field]: list };
     }
     case "DELETE": {
-      const list = (state[action.payload.field] as any[]).filter((_, i) => i !== action.payload.index);
+      const list = (state[action.payload.field] as unknown[]).filter((_, i) => i !== action.payload.index);
       return { ...state, [action.payload.field]: list };
     }
     case "RESET_DATA":
@@ -134,22 +134,27 @@ export function useAppData() {
 
   // Save data to API on change, with debounce (hanya jika admin)
   useEffect(() => {
-    if (!isClient || !dataLoaded || !adminUnlocked) return;
-    setSaveStatus("saving");
+    if (!isClient || !dataLoaded) {
+      return;
+    }
+
     const timer = setTimeout(async () => {
-      try {
-        const res = await fetch("/api/data", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(state),
-        });
-        if (!res.ok) {
-          throw new Error(`POST /api/data gagal: ${res.status}`);
+      if (adminUnlocked) {
+        setSaveStatus("saving");
+        try {
+          const res = await fetch("/api/data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(state),
+          });
+          if (!res.ok) {
+            throw new Error(`POST /api/data gagal: ${res.status}`);
+          }
+          setSaveStatus("saved");
+        } catch (err) {
+          console.error("Gagal menyimpan data ke backend:", err);
+          setSaveStatus("error");
         }
-        setSaveStatus("saved");
-      } catch (err) {
-        console.error("Gagal menyimpan data ke backend:", err);
-        setSaveStatus("error");
       }
     }, 800);
     return () => clearTimeout(timer);
