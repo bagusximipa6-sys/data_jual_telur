@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import type { Key } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { BakulTab } from "@/components/BakulTab";
 import { FinancialReportTab } from "@/components/FinancialReportTab";
@@ -81,16 +81,13 @@ const { state, dispatch, dataLoaded, isClient, loading, loadError, syncStatus, r
     },
   ];
 
-  // When switching to user mode, reset to a visible menu if currently on a locked one
-  useEffect(() => {
-    if (role === "user") {
-      const allMenus = menuGroups.flatMap((g) => g.items);
-      const lockedKeys = new Set(allMenus.filter((m) => m.adminOnly).map((m) => m.key));
-      if (lockedKeys.has(menu)) {
-        setMenu("dashboard");
-      }
-    }
-  }, [role, menu, menuGroups]);
+// Derive the effective menu during render: if a user role is on an admin-only menu,
+  // fall back to "dashboard" instead of resetting state in an effect.
+  const lockedKeys = useMemo(() => {
+    const allMenus = menuGroups.flatMap((g) => g.items);
+    return new Set(allMenus.filter((m) => m.adminOnly).map((m) => m.key));
+  }, [menuGroups]);
+  const effectiveMenu = role === "user" && lockedKeys.has(menu) ? "dashboard" : menu;
 
   // Filter menu yang terlihat berdasarkan role (admin/user)
   const visibleMenuGroups = useMemo(() => {
@@ -345,7 +342,7 @@ if (!isClient || loading) {
               <div key={group.title} className="flex items-center gap-2">
                 <div className="flex flex-row items-center gap-2 sm:items-center sm:gap-2">
                   {group.items.map(({ key, label, icon: Icon }) => {
-                    const active = menu === key;
+const active = effectiveMenu === key;
                     return (
                       <button
                         key={key}
@@ -376,8 +373,8 @@ if (!isClient || loading) {
         </div>
 
         {/* Dynamic Tab Content */}
-        <motion.div key={menu} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-          {menu === "dashboard" && (
+<motion.div key={effectiveMenu} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+{effectiveMenu === "dashboard" && (
             <div className="space-y-6">
               {/* Laporan Harian Header */}
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#191712]/10 bg-white p-4 sm:px-6">
@@ -590,7 +587,7 @@ if (!isClient || loading) {
             </div>
           )}
 
-          {menu === "stockin" && (
+{effectiveMenu === "stockin" && (
             <StockInTab
               stockIn={stockIn}
               itemNames={itemNames}
@@ -601,7 +598,7 @@ if (!isClient || loading) {
             />
           )}
 
-{menu === "stockout" && (
+{effectiveMenu === "stockout" && (
 <StockOutTab
               stockOut={stockOut}
               itemNames={itemNames}
@@ -614,7 +611,7 @@ if (!isClient || loading) {
             />
           )}
 
-{menu === "bakul" && (
+{effectiveMenu === "bakul" && (
             <BakulTab
               bakulRecords={filteredBakul}
               bakulNames={bakulNames}
@@ -625,7 +622,7 @@ if (!isClient || loading) {
             />
           )}
 
-          {menu === "ops" && (
+{effectiveMenu === "ops" && (
             <OpsTab
               ops={ops}
               categories={categories}
@@ -637,11 +634,11 @@ if (!isClient || loading) {
             />
           )}
 
-{menu === "laporan" && (
+{effectiveMenu === "laporan" && (
             <FinancialReportTab stockOut={stockOut} stockIn={stockIn} ops={ops} role={role} />
           )}
 
-          {menu === "master" && (
+{effectiveMenu === "master" && (
             <MasterTab
               categories={categories}
               sales={sales}

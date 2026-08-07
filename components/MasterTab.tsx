@@ -323,7 +323,7 @@ items.map((item, index) => {
             <Input
               label="Nama Bakul"
               labelPlacement="outside"
-              placeholder="cth. Demak"
+              placeholder="cth. Saeful"
               value={bakulForm.name}
               onValueChange={(name) => setBakulForm((prev) => ({ ...prev, name }))}
               radius="sm"
