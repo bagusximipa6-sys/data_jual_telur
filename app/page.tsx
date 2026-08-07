@@ -339,10 +339,10 @@ if (!isClient || loading) {
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
         {/* Navigation Tabs */}
         <div className="rounded-2xl bg-white/70 p-2 shadow-sm backdrop-blur-sm border border-[#191712]/5">
-          <nav className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
+<nav className="flex flex-row flex-nowrap items-stretch gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:gap-4 sm:overflow-visible sm:pb-0">
             {visibleMenuGroups.map((group) => (
-              <div key={group.title} className="flex items-start gap-2">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+              <div key={group.title} className="flex items-center gap-2">
+                <div className="flex flex-row items-center gap-2 sm:items-center sm:gap-2">
                   {group.items.map(({ key, label, icon: Icon }) => {
                     const active = menu === key;
                     return (
@@ -350,7 +350,7 @@ if (!isClient || loading) {
                         key={key}
                         type="button"
                         onClick={() => setMenu(key)}
-                        className={`group flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2.5 text-center transition-all sm:flex-row sm:px-3 sm:py-2 w-[72px] sm:w-auto ${
+                        className={`group flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2.5 text-center transition-all sm:shrink sm:flex-row sm:px-3 sm:py-2 w-[72px] sm:w-auto ${
                           active
                             ? "bg-[#191712] text-white shadow-md"
                             : "bg-[#f7f5ef] text-[#706858] hover:bg-[#f0eadb] hover:text-[#191712]"

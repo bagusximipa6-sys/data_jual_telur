@@ -107,12 +107,12 @@ export function useAppData() {
   const isClient = useSyncExternalStore(subscribeToClient, () => true, () => false);
   const { adminUnlocked } = useAuth();
   const [state, dispatch] = useReducer(dataReducer, initialState);
-  const [dataLoaded, setDataLoaded] = useState(false);
+const [dataLoaded, setDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
-  const reload = () => {
+const reload = () => {
     setLoading(true);
     setLoadError(null);
     loadFromApi(initialState).then((data) => {
@@ -122,6 +122,15 @@ export function useAppData() {
     }).catch(() => {
       setLoadError("Gagal memuat data dari server.");
       setLoading(false);
+    });
+  };
+
+  // Advance version for background sync (non-blocking, no spinner)
+  const silentReload = () => {
+    loadFromApi(initialState).then((data) => {
+      dispatch({ type: "SET_ALL_DATA", payload: data });
+    }).catch(() => {
+      // abaikan error di background polling
     });
   };
 
@@ -160,6 +169,33 @@ export function useAppData() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isClient, dataLoaded, adminUnlocked, state]);
+
+  // === Sinkronisasi data antar perangkat ===
+  // Polling berkala (setiap 10 detik) di latar belakang.
+  // Hanya dijalankan ketika tab aktif & tidak sedang menampilkan loading awal.
+  useEffect(() => {
+    if (!isClient || !dataLoaded || loading) return;
+
+const sync = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        // Ambil data terbaru di latar belakang tanpa spinner.
+        // Catatan: polling ini hanya menimpa state lokal dengan data server.
+        // Jika admin sedang mengetik, perubahan akan tetap ter-save via debounce
+        // dan polling berikutnya akan mengambil hasil save tersebut.
+        silentReload();
+      }
+    };
+
+    const interval = setInterval(sync, 10000);
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", sync);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClient, dataLoaded, loading]);
 
   // Reset data: admin only
   const handleResetData = async () => {
