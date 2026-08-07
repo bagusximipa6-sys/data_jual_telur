@@ -51,6 +51,9 @@ makesomething.json
 *.tsbuildinfo
 next-env.d.ts
 
+# stack dumps
+*.stackdump
+
 # build & dev logs
 build-output*.log
 dev-server.log
