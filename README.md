@@ -42,7 +42,38 @@ The application will be available at `http://localhost:3000`.
 
 ## How It Works
 
-The application uses the browser's `localStorage` to persist data, so no database is required. It operates in two modes:
+The application stores all data in a **Vercel Postgres** database, synced via API routes (`/api/data`). It operates in two modes:
 
 - **User Mode:** A read-only view of all financial data.
 - **Admin Mode:** Allows for adding, editing, and deleting records. This mode is protected by a password.
+
+## Deploying to Vercel
+
+### 1. Prerequisites (Environment Variables)
+
+Set these in your Vercel project **Settings → Environment Variables**:
+
+| Variable | Description |
+| --- | --- |
+| `POSTGRES_URL` | Automatically set when you connect a **Vercel Postgres** database to your project. |
+| `ADMIN_PASSWORD` | Your admin password for unlocking Admin Mode. |
+
+### 2. Auto-Migration
+
+The database tables are created automatically. On each request, the server ensures the schema exists (`lib/migrate.ts`) before reading or writing data. **No manual migration step is required.**
+
+After deploying, simply open the app URL. The tables will be created on first load and the sync status will show **"Tersimpan"** (saved) instead of **"Offline"**.
+
+### 3. Manual Migration (Optional)
+
+If you prefer to run the schema manually against your database, you can use the in-app migration API:
+
+```bash
+# Run against a locally running dev server
+npm run dev
+npx tsx scripts/migrate.ts
+# Or target the deployed URL
+MIGRATE_API_URL="https://your-app.vercel.app" npx tsx scripts/migrate.ts
+```
+
+> **Note:** The `/api/migrate` endpoint requires an active admin session cookie.

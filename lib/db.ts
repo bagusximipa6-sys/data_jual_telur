@@ -1,4 +1,5 @@
 import { db } from "@vercel/postgres";
+import { ensureSchema } from "@/lib/migrate";
 import type {
   BakulMaster,
   BakulRecord,
@@ -59,6 +60,8 @@ type MetaRow = { opsCategories: string[] };
 
 // === Load seluruh data dari DB ===
 export async function loadAllData(): Promise<AppDataSet> {
+  // Pastikan tabel sudah ada sebelum query dijalankan.
+  await ensureSchema();
   const [itemsR, bakulMastersR, stockInR, stockOutR, salesR, bakulRecordsR, opsR, metaR] =
     await Promise.all([
       db.sql`SELECT id, name, sell_price AS "sellPrice" FROM items ORDER BY created_at ASC`,
@@ -155,9 +158,11 @@ export async function saveAllData(data: AppDataSet): Promise<void> {
     bakulMasters,
     stockIn,
     stockOut,
-    opsCategories,
+opsCategories,
   } = data;
 
+// Pastikan tabel sudah ada sebelum menulis.
+  await ensureSchema();
 const client = await db.connect();
   try {
     await client.sql`BEGIN`;
@@ -234,6 +239,8 @@ const client = await db.connect();
 
 // === Reset seluruh data ke awal kosong ===
 export async function resetAllData(): Promise<void> {
+  // Pastikan tabel sudah ada sebelum operasi reset.
+  await ensureSchema();
   const client = await db.connect();
   try {
     await client.sql`BEGIN`;
