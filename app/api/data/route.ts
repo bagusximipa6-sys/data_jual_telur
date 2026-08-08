@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     // Defense-in-depth: tolak simpan jika ada data harian pada tanggal lampau
     // yang akan diubah/dihapus (daily lock).
-    const violation = findLockedViolation(data);
+    const violation = await findLockedViolation(data);
     if (violation) {
       return NextResponse.json({ ok: false, error: violation }, { status: 403 });
     }
