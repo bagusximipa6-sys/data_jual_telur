@@ -14,16 +14,18 @@ import {
   Tab,
   Tabs,
 } from "@heroui/react";
-import { AlertCircle, Edit2, Plus, Printer, Search } from "lucide-react";
+import { AlertCircle, Edit2, Lock, Plus, Printer, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { rupiah, shortNumber, toNumber } from "@/lib/utils";
-import { BakulRecord, ItemMaster, StockOutRecord } from "@/types/finance";
+import { getActivePrice, rupiah, shortNumber, toNumber } from "@/lib/utils";
+import { BakulRecord, ItemMaster, PriceHistory, StockOutRecord } from "@/types/finance";
 
 interface StockOutTabProps {
   stockOut: StockOutRecord[];
   itemNames: string[];
   bakulNames: string[];
   items: ItemMaster[];
+  priceHistory: PriceHistory[];
+  isRecordLocked: (date: string | undefined) => boolean;
   onAddStockOut: (record: StockOutRecord) => void;
   onUpdateStockOut: (index: number, record: StockOutRecord) => void;
   onDeleteStockOut: (index: number) => void;
@@ -40,6 +42,8 @@ export function StockOutTab({
   itemNames,
   bakulNames,
   items,
+  priceHistory,
+  isRecordLocked,
   onAddStockOut,
   onUpdateStockOut,
   onDeleteStockOut,
@@ -105,6 +109,18 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
     if (form.saleType === "grosir" && !priceNum) return;
 
     const isNew = editingIndex === null;
+
+    // Snapshot Harga Transaksi (Price History): cari harga aktif pada tanggal transaksi.
+    // effectiveAt <= tanggal transaksi, paling baru. If tidak ada di PriceHistory,
+    // gunakan harga master barang.
+    const masterItem = items.find(
+      (i) => i.name.toLowerCase() === itemName.toLowerCase()
+    );
+    const activePrice = masterItem
+      ? getActivePrice(priceHistory, masterItem.id, form.date)
+      : null;
+const hargaBeliSnapshot = activePrice ? activePrice.hargaBeli : (masterItem?.buyPrice ?? 0);
+
     const record: StockOutRecord = {
       id: isNew ? nextId() : stockOut[editingIndex].id,
       date: form.date,
@@ -112,11 +128,12 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
       itemName,
       quantity,
       price: priceNum,
+      buyPriceSnapshot: hargaBeliSnapshot,
       saleType: form.saleType,
       paymentMethod: form.paymentMethod,
     };
 
-    if (isNew) {
+if (isNew) {
       onAddStockOut(record);
       // Jika pembayaran hutang, catat langsung ke Piutang Bakul
       if (form.paymentMethod === "hutang") {
@@ -435,7 +452,9 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
               Tidak ditemukan catatan barang keluar.
             </div>
           ) : (
-            filteredRecords.map(({ item, originalIndex }) => (
+            filteredRecords.map(({ item, originalIndex }) => {
+              const locked = isRecordLocked(item.date);
+              return (
               <Card
                 key={item.id}
                 shadow="none"
@@ -448,6 +467,11 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
                     <p className="text-xs text-[#706858] font-medium">
                       {item.date} • {item.bakulName}
                     </p>
+                    {locked && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#f0eadb] px-2 py-0.5 mt-1 text-[10px] font-bold text-[#706858]">
+                        <Lock size={10} /> Terkunci
+                      </span>
+                    )}
 <div className="mt-1 flex items-center gap-2">
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
@@ -490,6 +514,8 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
                       >
                         Struk
                       </Button>
+                      {!locked && (
+                        <>
                       <Button
                         size="sm"
                         variant="flat"
@@ -508,11 +534,14 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
                       >
                         Hapus
                       </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardBody>
               </Card>
-            ))
+              );
+            })
           )}
         </div>
       </div>

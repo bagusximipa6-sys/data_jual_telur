@@ -15,12 +15,14 @@ import {
 import { AlertCircle, Edit2, Lock, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { rupiah, shortNumber, toNumber } from "@/lib/utils";
-import { Role, StockInRecord } from "@/types/finance";
+import { PriceHistory, Role, StockInRecord } from "@/types/finance";
 
 interface StockInTabProps {
   stockIn: StockInRecord[];
   itemNames: string[];
   role: Role;
+  priceHistory: PriceHistory[];
+  isRecordLocked: (date: string | undefined) => boolean;
   onAddStockIn: (record: StockInRecord) => void;
   onUpdateStockIn: (index: number, record: StockInRecord) => void;
   onDeleteStockIn: (index: number) => void;
@@ -35,6 +37,8 @@ export function StockInTab({
   stockIn,
   itemNames,
   role,
+  priceHistory,
+  isRecordLocked,
   onAddStockIn,
   onUpdateStockIn,
   onDeleteStockIn,
@@ -256,7 +260,9 @@ const [form, setForm] = useState({
                 Tidak ditemukan catatan barang masuk.
               </div>
             ) : (
-              filteredRecords.map(({ item, originalIndex }) => (
+              filteredRecords.map(({ item, originalIndex }) => {
+                const locked = isRecordLocked(item.date);
+                return (
                 <Card
                   key={item.id}
                   shadow="none"
@@ -269,10 +275,15 @@ const [form, setForm] = useState({
                       <p className="text-xs text-[#706858] font-medium">
                         {item.date} • Harga Beli {rupiah(item.buyPrice)} /kg
                       </p>
+                      {locked && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#f0eadb] px-2 py-0.5 mt-1 text-[10px] font-bold text-[#706858]">
+                          <Lock size={10} /> Terkunci
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-4 justify-between sm:justify-end">
                       <span className="font-mono font-black text-[#1f8f5f]">+{shortNumber(item.quantity)} kg</span>
-                      {isAdmin && (
+                      {isAdmin && !locked && (
                         <div className="flex gap-1">
                           <Button
                             size="sm"
@@ -297,7 +308,8 @@ const [form, setForm] = useState({
                     </div>
                   </CardBody>
                 </Card>
-              ))
+                );
+              })
             )}
           </div>
         </div>

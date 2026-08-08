@@ -120,7 +120,11 @@ const buildProfitLoss = (
   const sorted = [...stockOut].sort((a, b) => a.date.localeCompare(b.date));
 
   for (const record of sorted) {
-    const buyPrice = buyPriceMap.get(record.itemName.toLowerCase()) ?? 0;
+    // Prioritas snapshot harga beli transaksi (Price History) -> fallback dari Stock In.
+    const buyPrice =
+      record.buyPriceSnapshot ??
+      buyPriceMap.get(record.itemName.toLowerCase()) ??
+      0;
     const omzet = record.quantity * record.price;
     const modalCost = record.quantity * buyPrice;
     const profit = omzet - modalCost;

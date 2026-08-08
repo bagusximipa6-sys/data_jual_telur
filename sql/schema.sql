@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS items (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   sell_price NUMERIC NOT NULL DEFAULT 0,
+  buy_price NUMERIC NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -37,8 +38,20 @@ CREATE TABLE IF NOT EXISTS stock_out (
   item_name TEXT NOT NULL,
   quantity NUMERIC NOT NULL DEFAULT 0,
   price NUMERIC NOT NULL DEFAULT 0,
+  buy_price_snapshot NUMERIC NOT NULL DEFAULT 0,
   sale_type TEXT DEFAULT 'eceran',
   payment_method TEXT DEFAULT 'cash',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Tabel: Riwayat Harga Barang (Price History)
+-- Setiap perubahan harga dicatat sebagai entri baru (bukan UPDATE harga lama).
+CREATE TABLE IF NOT EXISTS price_history (
+  id TEXT PRIMARY KEY,
+  barang_id TEXT NOT NULL,
+  harga_beli NUMERIC NOT NULL DEFAULT 0,
+  harga_jual NUMERIC NOT NULL DEFAULT 0,
+  effective_at TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -105,3 +118,4 @@ CREATE INDEX IF NOT EXISTS idx_stock_in_date ON stock_in (date);
 CREATE INDEX IF NOT EXISTS idx_bakul_records_date ON bakul_records (date);
 CREATE INDEX IF NOT EXISTS idx_ops_records_date ON ops_records (date);
 CREATE INDEX IF NOT EXISTS idx_sales_date ON sales (date);
+CREATE INDEX IF NOT EXISTS idx_price_history_barang ON price_history (barang_id);

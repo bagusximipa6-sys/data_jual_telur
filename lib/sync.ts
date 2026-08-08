@@ -4,6 +4,7 @@ import type {
   DailySale,
   ItemMaster,
   OperationalRecord,
+  PriceHistory,
   StockInRecord,
   StockOutRecord,
 } from "@/types/finance";
@@ -17,6 +18,7 @@ export type LocalDataset = {
   bakulMasters: BakulMaster[];
   stockIn: StockInRecord[];
   stockOut: StockOutRecord[];
+  priceHistory: PriceHistory[];
   opsCategories: string[];
 };
 
@@ -35,6 +37,7 @@ const EMPTY: LocalDataset = {
   bakulMasters: [],
   stockIn: [],
   stockOut: [],
+  priceHistory: [],
   opsCategories: [],
 };
 
@@ -80,6 +83,7 @@ export function hasAnyServerData(d: Partial<LocalDataset> | null): boolean {
     d.bakulMasters as unknown[],
     d.stockIn as unknown[],
     d.stockOut as unknown[],
+    d.priceHistory as unknown[],
   ];
   const hasData =
     arrays.some((arr) => Array.isArray(arr) && arr.length > 0) ||
@@ -94,9 +98,10 @@ export function emptyDataset(): LocalDataset {
     bakulRecords: [...EMPTY.bakulRecords],
     ops: [...EMPTY.ops],
     items: [...EMPTY.items],
-    bakulMasters: [...EMPTY.bakulMasters],
+bakulMasters: [...EMPTY.bakulMasters],
     stockIn: [...EMPTY.stockIn],
     stockOut: [...EMPTY.stockOut],
+    priceHistory: [...EMPTY.priceHistory],
     opsCategories: [...EMPTY.opsCategories],
   };
 }

@@ -11,15 +11,16 @@ import {
   ModalContent,
   ModalHeader,
 } from "@heroui/react";
-import { AlertTriangle, Boxes, Download, MapPin, Plus, RefreshCw, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Boxes, Download, History, MapPin, Plus, RefreshCw, Trash2, Upload, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
-import { exportToJSON, rupiah, toNumber } from "@/lib/utils";
+import { exportToJSON, rupiah, todayISO, toNumber } from "@/lib/utils";
 import {
   BakulMaster,
   BakulRecord,
   DailySale,
   ItemMaster,
   OperationalRecord,
+  PriceHistory,
   Role,
   StockInRecord,
   StockOutRecord,
@@ -34,11 +35,13 @@ interface MasterTabProps {
   bakulMasters: BakulMaster[];
   stockIn: StockInRecord[];
   stockOut: StockOutRecord[];
+  priceHistory: PriceHistory[];
   opsCategories: string[];
   role: Role;
   onAddItem: (item: ItemMaster) => void;
   onUpdateItem: (index: number, item: ItemMaster) => void;
   onDeleteItem: (index: number) => void;
+  onAddPriceHistory: (record: PriceHistory) => void;
   onAddBakulMaster: (master: BakulMaster) => void;
   onUpdateBakulMaster: (index: number, master: BakulMaster) => void;
   onDeleteBakulMaster: (index: number) => void;
@@ -52,6 +55,7 @@ interface MasterTabProps {
     bakulMasters?: BakulMaster[];
     stockIn?: StockInRecord[];
     stockOut?: StockOutRecord[];
+    priceHistory?: PriceHistory[];
     opsCategories?: string[];
   }) => void;
   onResetData: () => void;
@@ -68,11 +72,13 @@ export function MasterTab({
   bakulMasters,
   stockIn,
   stockOut,
+  priceHistory,
   opsCategories,
   role,
   onAddItem,
   onUpdateItem,
   onDeleteItem,
+  onAddPriceHistory,
   onAddBakulMaster,
   onUpdateBakulMaster,
   onDeleteBakulMaster,
@@ -87,12 +93,12 @@ export function MasterTab({
   const isAdmin = role === "admin";
 
   // === Form State: Master Barang ===
-const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
+const [itemForm, setItemForm] = useState({ name: "", sellPrice: "", buyPrice: "" });
   const [itemEditIndex, setItemEditIndex] = useState<number | null>(null);
   const [itemDeleteIndex, setItemDeleteIndex] = useState<number | null>(null);
 
   const resetItemForm = () => {
-    setItemForm({ name: "", sellPrice: "" });
+    setItemForm({ name: "", sellPrice: "", buyPrice: "" });
     setItemEditIndex(null);
   };
 
@@ -100,20 +106,33 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
     e.preventDefault();
     const name = itemForm.name.trim();
     const sellPrice = toNumber(itemForm.sellPrice);
+    const buyPrice = toNumber(itemForm.buyPrice);
     if (!name || sellPrice <= 0) return;
 
-    const record: ItemMaster = { id: uid(), name, sellPrice };
+    const record: ItemMaster = { id: uid(), name, sellPrice, buyPrice };
     if (itemEditIndex !== null) {
       onUpdateItem(itemEditIndex, record);
     } else {
       onAddItem(record);
     }
+    // Catat entri PriceHistory baru (append-only) — tidak UPDATE harga lama.
+    onAddPriceHistory({
+      id: uid(),
+      barangId: record.id,
+      hargaBeli: buyPrice,
+      hargaJual: sellPrice,
+      effectiveAt: todayISO(),
+    });
     resetItemForm();
   };
 
   const handleStartEditItem = (item: ItemMaster, index: number) => {
     setItemEditIndex(index);
-    setItemForm({ name: item.name, sellPrice: String(item.sellPrice) });
+    setItemForm({
+      name: item.name,
+      sellPrice: String(item.sellPrice),
+      buyPrice: item.buyPrice ? String(item.buyPrice) : "",
+    });
   };
 
   // === Form State: Master Pelanggan / Bakul ===
@@ -147,7 +166,7 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
 
 // === Backup / Restore ===
   const handleExportJSON = () => {
-    exportToJSON(sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories);
+    exportToJSON(sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories, priceHistory);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,6 +186,7 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
             bakulMasters: Array.isArray(json.bakulMasters) ? json.bakulMasters : [],
             stockIn: Array.isArray(json.stockIn) ? json.stockIn : [],
             stockOut: Array.isArray(json.stockOut) ? json.stockOut : [],
+            priceHistory: Array.isArray(json.priceHistory) ? json.priceHistory : [],
             opsCategories: Array.isArray(json.opsCategories) ? json.opsCategories : [],
           });
           setImportError("");
@@ -223,6 +243,14 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
                 radius="sm"
                 required
               />
+              <Input
+                label="Harga Beli /kg (Rp)"
+                labelPlacement="outside"
+                placeholder="cth. 21000"
+                value={itemForm.buyPrice}
+                onValueChange={(buyPrice) => setItemForm((prev) => ({ ...prev, buyPrice }))}
+                radius="sm"
+              />
 
               <div className="flex gap-2">
                 <Button
@@ -259,10 +287,14 @@ items.map((item, index) => {
                             <p className="text-[10px] text-[#706858] uppercase font-bold">Master Barang</p>
                           </div>
                         </div>
-                        <div className="grid grid-cols-1 gap-2 text-xs">
+                        <div className="grid grid-cols-2 gap-2 text-xs">
                           <div className="rounded-lg bg-[#f7f5ef] p-2">
                             <span className="text-[10px] text-[#706858] uppercase block">Harga Jual /kg</span>
                             <span className="font-bold text-[#1f8f5f]">{rupiah(item.sellPrice)}</span>
+                          </div>
+                          <div className="rounded-lg bg-[#f7f5ef] p-2">
+                            <span className="text-[10px] text-[#706858] uppercase block">Harga Beli /kg</span>
+                            <span className="font-bold text-[#8f321a]">{rupiah(item.buyPrice ?? 0)}</span>
                           </div>
                         </div>
                         <div className="flex gap-2 pt-1 border-t border-[#191712]/5">
@@ -298,6 +330,47 @@ items.map((item, index) => {
             🔒 <strong>Master Barang & Harga</strong> hanya dapat diubah dalam Mode Admin (Owner).
           </div>
         )}
+
+        {/* Riwayat Harga (Price History) */}
+        <div className="rounded-xl border border-[#191712]/10 bg-[#f7f5ef] p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <History size={16} className="text-[#706858]" />
+            <h3 className="font-black text-sm text-[#191712]">Riwayat Harga Berbasis Tanggal (Price History)</h3>
+          </div>
+          <p className="text-[11px] text-[#706858]">
+            Setiap kali harga barang diubah, entri baru dicatat (append-only). Harga lama tidak ditimpa, sehingga
+            laporan keuangan hari-hari sebelumnya tidak berubah.
+          </p>
+          {priceHistory.length === 0 ? (
+            <p className="text-xs text-[#706858]">
+              Belum ada riwayat harga. Simpan barang beserta harga untuk mencatat entri pertama.
+            </p>
+          ) : (
+            <div className="max-h-[240px] space-y-2 overflow-y-auto pr-1">
+              {priceHistory
+                .slice()
+                .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt))
+                .map((p) => {
+                  const item = items.find((i) => i.id === p.barangId);
+                  return (
+                    <div
+                      key={p.id}
+                      className="rounded-lg bg-white border border-[#191712]/10 px-3 py-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-black text-[#191712]">{item?.name ?? "(barang terhapus)"}</span>
+                        <span className="font-mono text-[10px] font-bold text-[#706858]">{p.effectiveAt}</span>
+                      </div>
+                      <div className="text-[#706858] font-medium mt-0.5">
+                        Beli <span className="text-[#8f321a] font-bold">{rupiah(p.hargaBeli)}</span>
+                        {" • "}Jual <span className="text-[#1f8f5f] font-bold">{rupiah(p.hargaJual)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Master Pelanggan / Bakul (User & Owner) */}

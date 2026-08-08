@@ -6,6 +6,7 @@ import type {
   DailySale,
   ItemMaster,
   OperationalRecord,
+  PriceHistory,
   StockInRecord,
   StockOutRecord,
 } from "@/types/finance";
@@ -19,6 +20,7 @@ export type AppDataSet = {
   bakulMasters: BakulMaster[];
   stockIn: StockInRecord[];
   stockOut: StockOutRecord[];
+  priceHistory: PriceHistory[];
   opsCategories: string[];
 };
 
@@ -27,7 +29,7 @@ const num = (v: unknown): number =>
   typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) || 0 : 0;
 
 // === Tipe baris hasil query ===
-type ItemRow = { id: string; name: string; sellPrice: number };
+type ItemRow = { id: string; name: string; sellPrice: number; buyPrice?: number };
 type BakulMasterRow = { id: string; name: string; address: string };
 type StockInRow = { id: string; date: string; itemName: string; quantity: number; buyPrice: number };
 type StockOutRow = {
@@ -37,8 +39,16 @@ type StockOutRow = {
   itemName: string;
   quantity: number;
   price: number;
+  buyPriceSnapshot?: number;
   saleType: string;
   paymentMethod: string;
+};
+type PriceHistoryRow = {
+  id: string;
+  barangId: string;
+  hargaBeli: number;
+  hargaJual: number;
+  effectiveAt: string;
 };
 type SaleRow = {
   date: string;
@@ -62,22 +72,24 @@ type MetaRow = { opsCategories: string[] };
 export async function loadAllData(): Promise<AppDataSet> {
   // Pastikan tabel sudah ada sebelum query dijalankan.
   await ensureSchema();
-  const [itemsR, bakulMastersR, stockInR, stockOutR, salesR, bakulRecordsR, opsR, metaR] =
+  const [itemsR, bakulMastersR, stockInR, stockOutR, salesR, bakulRecordsR, opsR, metaR, priceHistoryR] =
     await Promise.all([
-      db.sql`SELECT id, name, sell_price AS "sellPrice" FROM items ORDER BY created_at ASC`,
+      db.sql`SELECT id, name, sell_price AS "sellPrice", buy_price AS "buyPrice" FROM items ORDER BY created_at ASC`,
       db.sql`SELECT id, name, address FROM bakul_masters ORDER BY created_at ASC`,
       db.sql`SELECT id, date, item_name AS "itemName", quantity, buy_price AS "buyPrice" FROM stock_in ORDER BY created_at ASC`,
-      db.sql`SELECT id, date, bakul_name AS "bakulName", item_name AS "itemName", quantity, price, sale_type AS "saleType", payment_method AS "paymentMethod" FROM stock_out ORDER BY created_at ASC`,
+      db.sql`SELECT id, date, bakul_name AS "bakulName", item_name AS "itemName", quantity, price, buy_price_snapshot AS "buyPriceSnapshot", sale_type AS "saleType", payment_method AS "paymentMethod" FROM stock_out ORDER BY created_at ASC`,
       db.sql`SELECT date, modal_qty AS "modalQty", modal_total AS "modalTotal", sale_qty AS "saleQty", sale_total AS "saleTotal", shrink, target, gross_profit AS "grossProfit", difference, operational, net_profit AS "netProfit", note FROM sales ORDER BY position ASC, created_at ASC`,
       db.sql`SELECT date, name, bill, paid, balance, note FROM bakul_records ORDER BY position ASC, created_at ASC`,
       db.sql`SELECT date, description, amount, note FROM ops_records ORDER BY position ASC, created_at ASC`,
       db.sql`SELECT ops_categories AS "opsCategories" FROM app_meta WHERE id = 1`,
+      db.sql`SELECT id, barang_id AS "barangId", harga_beli AS "hargaBeli", harga_jual AS "hargaJual", effective_at AS "effectiveAt" FROM price_history ORDER BY effective_at ASC, created_at ASC`,
     ]);
 
   const items: ItemMaster[] = (itemsR.rows as unknown as ItemRow[]).map((r) => ({
     id: r.id,
     name: r.name,
     sellPrice: num(r.sellPrice),
+    buyPrice: r.buyPrice != null ? num(r.buyPrice) : 0,
   }));
 
   const bakulMasters: BakulMaster[] = (bakulMastersR.rows as unknown as BakulMasterRow[]).map((r) => ({
@@ -101,6 +113,7 @@ const stockOut: StockOutRecord[] = (stockOutR.rows as unknown as StockOutRow[]).
     itemName: r.itemName,
     quantity: num(r.quantity),
     price: num(r.price),
+    buyPriceSnapshot: r.buyPriceSnapshot != null ? num(r.buyPriceSnapshot) : 0,
     saleType: (r.saleType === "grosir" ? "grosir" : "eceran") as "eceran" | "grosir",
     paymentMethod: (r.paymentMethod === "transfer"
       ? "transfer"
@@ -145,7 +158,15 @@ const stockOut: StockOutRecord[] = (stockOutR.rows as unknown as StockOutRow[]).
     ? metaRow.opsCategories
     : [];
 
-  return { sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories };
+  const priceHistory: PriceHistory[] = (priceHistoryR.rows as unknown as PriceHistoryRow[]).map((r) => ({
+    id: r.id,
+    barangId: r.barangId,
+    hargaBeli: num(r.hargaBeli),
+    hargaJual: num(r.hargaJual),
+    effectiveAt: r.effectiveAt,
+  }));
+
+  return { sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, priceHistory, opsCategories };
 }
 
 // === Simpan seluruh data (transaksi atomik) ===
@@ -158,7 +179,8 @@ export async function saveAllData(data: AppDataSet): Promise<void> {
     bakulMasters,
     stockIn,
     stockOut,
-opsCategories,
+    priceHistory,
+    opsCategories,
   } = data;
 
 // Pastikan tabel sudah ada sebelum menulis.
@@ -166,18 +188,19 @@ opsCategories,
 const client = await db.connect();
   try {
     await client.sql`BEGIN`;
-    await client.sql`DELETE FROM items`;
-    await client.sql`DELETE FROM bakul_masters`;
-    await client.sql`DELETE FROM stock_in`;
-    await client.sql`DELETE FROM stock_out`;
-    await client.sql`DELETE FROM sales`;
-    await client.sql`DELETE FROM bakul_records`;
     await client.sql`DELETE FROM ops_records`;
+    await client.sql`DELETE FROM bakul_records`;
+    await client.sql`DELETE FROM sales`;
+    await client.sql`DELETE FROM price_history`;
+    await client.sql`DELETE FROM stock_out`;
+    await client.sql`DELETE FROM stock_in`;
+    await client.sql`DELETE FROM bakul_masters`;
+    await client.sql`DELETE FROM items`;
 
     // Items
     for (const item of items) {
       await client.sql`
-        INSERT INTO items (id, name, sell_price) VALUES (${item.id}, ${item.name}, ${item.sellPrice})
+        INSERT INTO items (id, name, sell_price, buy_price) VALUES (${item.id}, ${item.name}, ${item.sellPrice}, ${item.buyPrice ?? 0})
       `;
     }
     // Bakul masters
@@ -196,8 +219,15 @@ const client = await db.connect();
     // Stock out
     for (const r of stockOut) {
       await client.sql`
-        INSERT INTO stock_out (id, date, bakul_name, item_name, quantity, price, sale_type, payment_method)
-        VALUES (${r.id}, ${r.date}, ${r.bakulName}, ${r.itemName}, ${r.quantity}, ${r.price}, ${r.saleType ?? "eceran"}, ${r.paymentMethod ?? "cash"})
+        INSERT INTO stock_out (id, date, bakul_name, item_name, quantity, price, buy_price_snapshot, sale_type, payment_method)
+        VALUES (${r.id}, ${r.date}, ${r.bakulName}, ${r.itemName}, ${r.quantity}, ${r.price}, ${r.buyPriceSnapshot ?? 0}, ${r.saleType ?? "eceran"}, ${r.paymentMethod ?? "cash"})
+      `;
+    }
+    // Price history
+    for (const p of priceHistory) {
+      await client.sql`
+        INSERT INTO price_history (id, barang_id, harga_beli, harga_jual, effective_at)
+        VALUES (${p.id}, ${p.barangId}, ${p.hargaBeli}, ${p.hargaJual}, ${p.effectiveAt})
       `;
     }
     // Sales
@@ -244,13 +274,14 @@ export async function resetAllData(): Promise<void> {
   const client = await db.connect();
   try {
     await client.sql`BEGIN`;
-    await client.sql`DELETE FROM items`;
-    await client.sql`DELETE FROM bakul_masters`;
-    await client.sql`DELETE FROM stock_in`;
-    await client.sql`DELETE FROM stock_out`;
-    await client.sql`DELETE FROM sales`;
-    await client.sql`DELETE FROM bakul_records`;
     await client.sql`DELETE FROM ops_records`;
+    await client.sql`DELETE FROM bakul_records`;
+    await client.sql`DELETE FROM sales`;
+    await client.sql`DELETE FROM price_history`;
+    await client.sql`DELETE FROM stock_out`;
+    await client.sql`DELETE FROM stock_in`;
+    await client.sql`DELETE FROM bakul_masters`;
+    await client.sql`DELETE FROM items`;
     await client.sql`UPDATE app_meta SET ops_categories = '[]'::jsonb, updated_at = now() WHERE id = 1`;
     await client.sql`COMMIT`;
   } catch (err) {

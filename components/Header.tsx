@@ -13,7 +13,7 @@ import {
   Tab,
   Tabs,
 } from "@heroui/react";
-import { CloudCog, CloudOff, Loader, LockKeyhole, LogOut, ShieldCheck, Sparkles } from "lucide-react";
+import { CloudCog, CloudOff, Loader, LockKeyhole, LogOut, ShieldCheck } from "lucide-react";
 import { Key, useState } from "react";
 import { Role } from "@/types/finance";
 import type { SyncStatus } from "@/lib/sync";
@@ -123,20 +123,25 @@ const handleAdminSubmit = async (e: React.FormEvent) => {
     <header className="border-b border-[#191712]/10 bg-white/80 backdrop-blur-md sticky top-0 z-40">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#d9ff67] to-[#b3e619] shadow-sm text-[#191712]">
-            <Sparkles size={24} />
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-[#191712]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/f66c6a5a-c43e-4d5b-9105-6888d8892eb5.jpg"
+              alt="Sahabat Telur"
+              className="h-full w-full object-cover"
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-[#706858]">
-                Buku Keuangan Digital
+                Sahabat Telur
               </span>
               <Chip className="bg-[#d9ff67] px-2 font-extrabold text-[#191712]" size="sm" variant="flat">
                 {stockOutCount} Transaksi
               </Chip>
             </div>
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl text-[#191712]">
-              Data Penjualan Telur
+              Buku Keuangan
             </h1>
           </div>
         </div>

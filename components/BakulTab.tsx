@@ -14,7 +14,7 @@ import {
   SelectItem,
   Textarea,
 } from "@heroui/react";
-import { AlertCircle, Edit2, Plus, Search, Trash2, UserPlus } from "lucide-react";
+import { AlertCircle, Edit2, Lock, Plus, Search, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { rupiah, toNumber } from "@/lib/utils";
 import { BakulRecord, Role } from "@/types/finance";
@@ -23,6 +23,7 @@ interface BakulTabProps {
   bakulRecords: BakulRecord[];
   bakulNames: string[];
   role: Role;
+  isRecordLocked?: (date: string | undefined) => boolean;
   onAddBakul: (record: BakulRecord) => void;
   onUpdateBakul: (index: number, record: BakulRecord) => void;
   onDeleteBakul: (index: number) => void;
@@ -34,6 +35,7 @@ export function BakulTab({
   bakulRecords,
   bakulNames,
   role,
+  isRecordLocked,
   onAddBakul,
   onUpdateBakul,
   onDeleteBakul,
@@ -295,7 +297,14 @@ export function BakulTab({
                   <CardBody className="gap-3 p-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <h3 className="font-black text-base text-[#191712]">{item.name}</h3>
+                        <h3 className="font-black text-base text-[#191712] flex items-center gap-2">
+                          {item.name}
+                          {isRecordLocked?.(item.date) && (
+                            <span className="rounded-full bg-[#e2e8f0] px-2 py-0.5 text-[9px] font-bold text-[#475569] uppercase flex items-center gap-0.5">
+                              <Lock size={9} /> Terkunci
+                            </span>
+                          )}
+                        </h3>
                         <p className="text-xs text-[#706858] font-medium">
                           {item.date} {item.note ? `• ${item.note}` : ""}
                         </p>
@@ -338,7 +347,7 @@ export function BakulTab({
                       />
                     </div>
 
-                    {role === "admin" && (
+                    {role === "admin" && !isRecordLocked?.(item.date) && (
                       <div className="flex gap-2 pt-1 border-t border-[#191712]/5">
                         <Button
                           size="sm"

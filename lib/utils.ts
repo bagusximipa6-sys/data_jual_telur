@@ -1,4 +1,31 @@
-import { BakulMaster, BakulRecord, DailySale, ItemMaster, OperationalRecord, StockInRecord, StockOutRecord } from "@/types/finance";
+import { BakulMaster, BakulRecord, DailySale, ItemMaster, OperationalRecord, PriceHistory, StockInRecord, StockOutRecord } from "@/types/finance";
+
+// Tanggal hari ini dalam format ISO (YYYY-MM-DD) menggunakan zona waktu lokal.
+export const todayISO = (): string => {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+};
+
+// Cek apakah sebuah tanggal (ISO) sudah terkunci (lebih kecil dari tanggal hari ini).
+export const isLockedDate = (dateISO: string): boolean => {
+  if (!dateISO) return false;
+  return dateISO < todayISO();
+};
+
+// Ambil harga aktif (snapshot) dari PriceHistory berdasarkan tanggal transaksi.
+// Mengembalikan entri PriceHistory dengan effectiveAt <= dateISO terbaru, atau null.
+export function getActivePrice(
+  priceHistory: PriceHistory[],
+  barangId: string,
+  dateISO: string
+): PriceHistory | null {
+  const candidates = priceHistory
+    .filter((p) => p.barangId === barangId && p.effectiveAt <= dateISO)
+    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt));
+  return candidates[0] ?? null;
+}
 
 export const rupiah = (value: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -87,10 +114,11 @@ export const exportToJSON = (
   stockIn: StockInRecord[] = [],
   stockOut: StockOutRecord[] = [],
   opsCategories: string[] = [],
+  priceHistory: PriceHistory[] = [],
   filename: string = "buku_keuangan_backup"
 ) => {
   const payload = {
-    version: 4,
+    version: 5,
     exportedAt: new Date().toISOString(),
     sales,
     bakulRecords,
@@ -100,6 +128,7 @@ export const exportToJSON = (
     stockIn,
     stockOut,
     opsCategories,
+    priceHistory,
   };
   const jsonContent = JSON.stringify(payload, null, 2);
   const blob = new Blob([jsonContent], { type: "application/json" });

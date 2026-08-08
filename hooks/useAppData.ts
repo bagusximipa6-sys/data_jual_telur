@@ -9,6 +9,7 @@ import type {
   BakulMaster,
   StockInRecord,
   StockOutRecord,
+  PriceHistory,
 } from "@/types/finance";
 import {
   initialSales,
@@ -19,6 +20,7 @@ import {
   initialStockIn,
   initialStockOut,
   initialOpsCategories,
+  initialPriceHistory,
 } from "@/app/rpa-data";
 import {
   fetchAllFromServer,
@@ -28,6 +30,7 @@ import {
   type LocalDataset,
   type SyncStatus,
 } from "@/lib/sync";
+import { isLockedDate } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 
 export type AppDataSet = {
@@ -38,6 +41,7 @@ export type AppDataSet = {
   bakulMasters: BakulMaster[];
   stockIn: StockInRecord[];
   stockOut: StockOutRecord[];
+  priceHistory: PriceHistory[];
   opsCategories: string[];
 };
 
@@ -56,11 +60,13 @@ export function useAppData() {
   const [bakulMasters, setBakulMasters] = useState<BakulMaster[]>(initialBakulMasters as BakulMaster[]);
   const [stockIn, setStockIn] = useState<StockInRecord[]>(initialStockIn as StockInRecord[]);
   const [stockOut, setStockOut] = useState<StockOutRecord[]>(initialStockOut as StockOutRecord[]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>(initialPriceHistory as PriceHistory[]);
   const [opsCategories, setOpsCategories] = useState<string[]>(initialOpsCategories as string[]);
 
   const [dataLoaded, setDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lockError, setLockError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
 
   // Guard agar inisialisasi tidak berjalan dua kali.
@@ -68,8 +74,8 @@ export function useAppData() {
 
   // Membangun dataset gabungan untuk dikirim ke server / dipakai aplikasi.
   const state: AppDataSet = useMemo(
-    () => ({ sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories }),
-    [sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories]
+    () => ({ sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, priceHistory, opsCategories }),
+    [sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, priceHistory, opsCategories]
   );
 
   // Satu-effect inisialisasi: tentukan sumber kebenaran.
@@ -102,6 +108,7 @@ export function useAppData() {
         setBakulMasters(serverData.bakulMasters ?? []);
         setStockIn(serverData.stockIn ?? []);
         setStockOut(serverData.stockOut ?? []);
+        setPriceHistory(serverData.priceHistory ?? []);
         setOpsCategories(serverData.opsCategories ?? []);
         setSyncStatus("saved");
       } else {
@@ -114,6 +121,7 @@ export function useAppData() {
           bakulMasters: initialBakulMasters as BakulMaster[],
           stockIn: initialStockIn as StockInRecord[],
           stockOut: initialStockOut as StockOutRecord[],
+          priceHistory: initialPriceHistory as PriceHistory[],
           opsCategories: initialOpsCategories as string[],
         };
         setSyncStatus("saving");
@@ -141,6 +149,7 @@ export function useAppData() {
       bakulMasters,
       stockIn,
       stockOut,
+      priceHistory,
       opsCategories,
     };
 
@@ -152,7 +161,7 @@ export function useAppData() {
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isClient, dataLoaded, syncStatus === "offline", sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories]);
+  }, [isClient, dataLoaded, syncStatus === "offline", sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, priceHistory, opsCategories]);
 
 // Tipe action yang didukung dispatch (kompatibel dengan pemakaian lama).
   type ActionMap = {
@@ -190,6 +199,7 @@ export function useAppData() {
       setBakulMasters(data.bakulMasters ?? []);
       setStockIn(data.stockIn ?? []);
       setStockOut(data.stockOut ?? []);
+      setPriceHistory(data.priceHistory ?? []);
       setOpsCategories(data.opsCategories ?? []);
       return;
     }
@@ -202,6 +212,7 @@ export function useAppData() {
       setBakulMasters(initialBakulMasters as BakulMaster[]);
       setStockIn(initialStockIn as StockInRecord[]);
       setStockOut(initialStockOut as StockOutRecord[]);
+      setPriceHistory(initialPriceHistory as PriceHistory[]);
       setOpsCategories(initialOpsCategories as string[]);
       return;
     }
@@ -227,9 +238,36 @@ export function useAppData() {
         case "bakulMasters": setBakulMasters(value as BakulMaster[]); break;
         case "stockIn": setStockIn(value as StockInRecord[]); break;
         case "stockOut": setStockOut(value as StockOutRecord[]); break;
+        case "priceHistory": setPriceHistory(value as PriceHistory[]); break;
         default: break;
       }
       return;
+    }
+
+    // --- Guard Daily Lock: blokir ubah/hapus rekaman tanggal lampau ---
+    const lockedFields = new Set(["sales", "bakulRecords", "ops", "stockIn", "stockOut"]);
+    if (lockedFields.has(field) && (action.type === "UPDATE" || action.type === "DELETE" || action.type === "ADD")) {
+      const payload = action.payload as { index?: number; value?: unknown };
+      const index = payload.index;
+      let date: string | undefined;
+      if (action.type === "DELETE") {
+        const arr = field === "sales"
+          ? sales
+          : field === "bakulRecords"
+          ? bakulRecords
+          : field === "ops"
+          ? ops
+          : field === "stockIn"
+          ? stockIn
+          : stockOut;
+        date = index !== undefined ? arr[index]?.date : undefined;
+      } else {
+        date = (payload.value as { date?: string } | undefined)?.date;
+      }
+      if (date && isLockedDate(date)) {
+        setLockError("Tidak dapat mengubah data pada tanggal yang sudah terkunci (hari lalu).");
+        return;
+      }
     }
 
     if (action.type === "ADD") {
@@ -242,6 +280,7 @@ export function useAppData() {
         case "bakulMasters": setBakulMasters((prev) => [value as BakulMaster, ...prev]); break;
         case "stockIn": setStockIn((prev) => [value as StockInRecord, ...prev]); break;
         case "stockOut": setStockOut((prev) => [value as StockOutRecord, ...prev]); break;
+        case "priceHistory": setPriceHistory((prev) => [value as PriceHistory, ...prev]); break;
         default: break;
       }
       return;
@@ -258,6 +297,7 @@ export function useAppData() {
         case "bakulMasters": setBakulMasters((prev) => prev.map((item, i) => (i === index ? value as BakulMaster : item))); break;
         case "stockIn": setStockIn((prev) => prev.map((item, i) => (i === index ? value as StockInRecord : item))); break;
         case "stockOut": setStockOut((prev) => prev.map((item, i) => (i === index ? value as StockOutRecord : item))); break;
+        case "priceHistory": setPriceHistory((prev) => prev.map((item, i) => (i === index ? value as PriceHistory : item))); break;
         default: break;
       }
       return;
@@ -273,6 +313,7 @@ export function useAppData() {
         case "bakulMasters": setBakulMasters((prev) => prev.filter((_, i) => i !== index)); break;
         case "stockIn": setStockIn((prev) => prev.filter((_, i) => i !== index)); break;
         case "stockOut": setStockOut((prev) => prev.filter((_, i) => i !== index)); break;
+        case "priceHistory": setPriceHistory((prev) => prev.filter((_, i) => i !== index)); break;
         default: break;
       }
       return;
@@ -292,6 +333,7 @@ export function useAppData() {
         setBakulMasters(serverData.bakulMasters ?? []);
         setStockIn(serverData.stockIn ?? []);
         setStockOut(serverData.stockOut ?? []);
+        setPriceHistory(serverData.priceHistory ?? []);
         setOpsCategories(serverData.opsCategories ?? []);
         setSyncStatus("saved");
       } else {
@@ -314,6 +356,7 @@ export function useAppData() {
     setBakulMasters(initialBakulMasters as BakulMaster[]);
     setStockIn(initialStockIn as StockInRecord[]);
     setStockOut(initialStockOut as StockOutRecord[]);
+    setPriceHistory(initialPriceHistory as PriceHistory[]);
     setOpsCategories(initialOpsCategories as string[]);
 
     setSyncStatus("saving");
@@ -329,6 +372,7 @@ export function useAppData() {
         bakulMasters: initialBakulMasters as BakulMaster[],
         stockIn: initialStockIn as StockInRecord[],
         stockOut: initialStockOut as StockOutRecord[],
+        priceHistory: initialPriceHistory as PriceHistory[],
         opsCategories: initialOpsCategories as string[],
       });
       setSyncStatus(success ? "saved" : resetOk ? "saved" : "error");
@@ -337,6 +381,12 @@ export function useAppData() {
     }
   }, []);
 
+  // Helper: apakah sebuah tanggal sudah terkunci (tanggal lampau).
+  const isRecordLocked = useCallback(
+    (date: string | undefined): boolean => !!date && isLockedDate(date),
+    []
+  );
+
   return {
     state,
     dispatch,
@@ -344,7 +394,10 @@ export function useAppData() {
     isClient,
     loading,
     loadError,
+    lockError,
     syncStatus,
+    priceHistory,
+    isRecordLocked,
     reload,
     handleResetData,
   };

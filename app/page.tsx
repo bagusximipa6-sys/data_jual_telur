@@ -35,12 +35,13 @@ import {
   BakulRecord,
   ItemMaster,
   OperationalRecord,
+  PriceHistory,
   StockInRecord,
   StockOutRecord,
 } from "@/types/finance";
 
 export default function Home() {
-const { state, dispatch, dataLoaded, isClient, loading, loadError, syncStatus, reload, handleResetData } =
+const { state, dispatch, dataLoaded, isClient, loading, loadError, lockError, syncStatus, reload, handleResetData, priceHistory, isRecordLocked } =
     useAppData();
   const { sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories } = state;
   const { role, adminUnlocked, handleUnlockAdmin, handleLogoutAdmin, handleRoleChange } = useAuth();
@@ -228,6 +229,11 @@ const bakulNames = useMemo(() => unique(bakulMasters.map((item) => item.name)), 
     dispatch({ type: "DELETE", payload: { field: "items", index } });
   };
 
+  // CRUD Riwayat Harga (Price History)
+  const handleAddPriceHistory = (record: PriceHistory) => {
+    dispatch({ type: "ADD", payload: { field: "priceHistory", value: record } });
+  };
+
   // CRUD Master Pelanggan / Bakul
   const handleAddBakulMaster = (newMaster: BakulMaster) => {
     dispatch({ type: "ADD", payload: { field: "bakulMasters", value: newMaster } });
@@ -317,6 +323,11 @@ if (!isClient || loading) {
           >
             Coba Lagi
           </button>
+        </div>
+      )}
+      {lockError && (
+        <div className="bg-[#fff3cd] border-b border-amber-300 px-4 py-3 text-sm font-bold text-amber-900">
+          🔒 {lockError}
         </div>
       )}
       {/* Header Bar */}
@@ -592,6 +603,8 @@ const active = effectiveMenu === key;
               stockIn={stockIn}
               itemNames={itemNames}
               role={role}
+              priceHistory={priceHistory}
+              isRecordLocked={isRecordLocked}
               onAddStockIn={handleAddStockIn}
               onUpdateStockIn={handleUpdateStockIn}
               onDeleteStockIn={handleDeleteStockIn}
@@ -604,6 +617,8 @@ const active = effectiveMenu === key;
               itemNames={itemNames}
               bakulNames={bakulNames}
               items={items}
+              priceHistory={priceHistory}
+              isRecordLocked={isRecordLocked}
               onAddStockOut={handleAddStockOut}
               onUpdateStockOut={handleUpdateStockOut}
               onDeleteStockOut={handleDeleteStockOut}
@@ -616,6 +631,7 @@ const active = effectiveMenu === key;
               bakulRecords={filteredBakul}
               bakulNames={bakulNames}
               role={role}
+              isRecordLocked={isRecordLocked}
               onAddBakul={handleAddBakul}
               onUpdateBakul={handleUpdateBakul}
               onDeleteBakul={handleDeleteBakul}
@@ -623,10 +639,11 @@ const active = effectiveMenu === key;
           )}
 
 {effectiveMenu === "ops" && (
-            <OpsTab
+<OpsTab
               ops={ops}
               categories={categories}
               role={role}
+              isRecordLocked={isRecordLocked}
               onAddOps={handleAddOps}
               onUpdateOps={handleUpdateOps}
               onDeleteOps={handleDeleteOps}
@@ -648,11 +665,13 @@ const active = effectiveMenu === key;
               bakulMasters={bakulMasters}
               stockIn={stockIn}
               stockOut={stockOut}
+              priceHistory={priceHistory}
               opsCategories={opsCategories}
               role={role}
               onAddItem={handleAddItem}
               onUpdateItem={handleUpdateItem}
               onDeleteItem={handleDeleteItem}
+              onAddPriceHistory={handleAddPriceHistory}
               onAddBakulMaster={handleAddBakulMaster}
               onUpdateBakulMaster={handleUpdateBakulMaster}
               onDeleteBakulMaster={handleDeleteBakulMaster}

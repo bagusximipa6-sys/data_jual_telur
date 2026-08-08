@@ -13,7 +13,7 @@ import {
   SelectItem,
   Textarea,
 } from "@heroui/react";
-import { AlertCircle, Edit2, Plus, Search, Tag } from "lucide-react";
+import { AlertCircle, Edit2, Lock, Plus, Search, Tag } from "lucide-react";
 import { useState } from "react";
 import { rupiah, toNumber } from "@/lib/utils";
 import { OperationalRecord, Role } from "@/types/finance";
@@ -22,6 +22,7 @@ interface OpsTabProps {
   ops: OperationalRecord[];
   categories: string[];
   role: Role;
+  isRecordLocked?: (date: string | undefined) => boolean;
   onAddOps: (record: OperationalRecord) => void;
   onUpdateOps: (index: number, record: OperationalRecord) => void;
   onDeleteOps: (index: number) => void;
@@ -34,6 +35,7 @@ export function OpsTab({
   ops,
   categories,
   role,
+  isRecordLocked,
   onAddOps,
   onUpdateOps,
   onDeleteOps,
@@ -267,14 +269,21 @@ const handleSubmit = (e: React.FormEvent) => {
                 >
                   <CardBody className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="font-black text-[#191712] capitalize">{item.description}</h3>
+                      <h3 className="font-black text-[#191712] capitalize flex items-center gap-2">
+                        {item.description}
+                        {isRecordLocked?.(item.date) && (
+                          <span className="rounded-full bg-[#e2e8f0] px-2 py-0.5 text-[9px] font-bold text-[#475569] uppercase flex items-center gap-0.5">
+                            <Lock size={9} /> Terkunci
+                          </span>
+                        )}
+                      </h3>
                       <p className="text-xs text-[#706858] font-medium">
                         {item.date} {item.note ? `• ${item.note}` : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-4 justify-between sm:justify-end">
                       <span className="font-mono font-black text-[#8f321a]">{rupiah(item.amount)}</span>
-                      {role === "admin" && (
+                      {role === "admin" && !isRecordLocked?.(item.date) && (
                         <div className="flex gap-1">
                           <Button
                             size="sm"

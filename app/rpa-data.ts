@@ -5,6 +5,7 @@
   ItemMaster,
   OperationalRecord,
   PiutangPayment,
+  PriceHistory,
   StockInRecord,
   StockOutRecord,
 } from "@/types/finance";
@@ -24,5 +25,7 @@ export const initialBakulMasters: BakulMaster[] = [];
 export const initialStockIn: StockInRecord[] = [];
 
 export const initialStockOut: StockOutRecord[] = [];
+
+export const initialPriceHistory: PriceHistory[] = [];
 
 export const initialPiutangPayments: PiutangPayment[] = [];
