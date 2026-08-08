@@ -627,11 +627,11 @@ const active = effectiveMenu === key;
           )}
 
 {effectiveMenu === "bakul" && (
-            <BakulTab
+<BakulTab
               bakulRecords={filteredBakul}
               bakulNames={bakulNames}
               role={role}
-              isRecordLocked={isRecordLocked}
+              isRecordLocked={() => false}
               onAddBakul={handleAddBakul}
               onUpdateBakul={handleUpdateBakul}
               onDeleteBakul={handleDeleteBakul}

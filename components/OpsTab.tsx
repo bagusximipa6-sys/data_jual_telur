@@ -42,6 +42,7 @@ export function OpsTab({
   onAddOpsCategory,
 }: OpsTabProps) {
   const [search, setSearch] = useState("");
+  const [filterDate, setFilterDate] = useState<string>("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
   const [isCustomCategory, setIsCustomCategory] = useState(false);
@@ -105,10 +106,11 @@ const handleSubmit = (e: React.FormEvent) => {
     handleCancelEdit();
   };
 
-  // Search filter
+  // Search + date filter
   const filteredOps = ops
     .map((item, originalIndex) => ({ item, originalIndex }))
     .filter(({ item }) => {
+      if (filterDate && item.date !== filterDate) return false;
       if (!search.trim()) return true;
       const query = search.toLowerCase();
       return (
@@ -240,17 +242,30 @@ const handleSubmit = (e: React.FormEvent) => {
         <div className="rounded-2xl border border-[#191712]/10 bg-white p-5 shadow-sm sm:p-6 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-black text-[#191712]">Rincian Operasional</h2>
-            <div className="w-full sm:w-64">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Input
+                type="date"
                 size="sm"
-                placeholder="Cari kategori/tanggal..."
-                value={search}
-                onValueChange={setSearch}
-                startContent={<Search size={14} className="text-[#706858]" />}
+                className="w-full sm:w-[160px]"
+                value={filterDate}
+                onValueChange={setFilterDate}
+                aria-label="Filter Tanggal"
                 radius="sm"
                 isClearable
-                onClear={() => setSearch("")}
+                onClear={() => setFilterDate("")}
               />
+              <div className="w-full sm:w-64">
+                <Input
+                  size="sm"
+                  placeholder="Cari kategori/tanggal..."
+                  value={search}
+                  onValueChange={setSearch}
+                  startContent={<Search size={14} className="text-[#706858]" />}
+                  radius="sm"
+                  isClearable
+                  onClear={() => setSearch("")}
+                />
+              </div>
             </div>
           </div>
 

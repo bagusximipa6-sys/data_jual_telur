@@ -40,7 +40,8 @@ export function BakulTab({
   onUpdateBakul,
   onDeleteBakul,
 }: BakulTabProps) {
-  const [search, setSearch] = useState("");
+const [search, setSearch] = useState("");
+  const [filterDate, setFilterDate] = useState<string>("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
   const [isCustomName, setIsCustomName] = useState(false);
@@ -106,10 +107,11 @@ export function BakulTab({
     handleCancelEdit();
   };
 
-  // Search filter
+// Search + date filter
   const filteredRecords = bakulRecords
     .map((item, originalIndex) => ({ item, originalIndex }))
     .filter(({ item }) => {
+      if (filterDate && item.date !== filterDate) return false;
       if (!search.trim()) return true;
       const query = search.toLowerCase();
       return (
@@ -261,18 +263,31 @@ export function BakulTab({
       {/* Data List Panel */}
       <div className="rounded-2xl border border-[#191712]/10 bg-white p-5 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-xl font-black text-[#191712]">Catatan Piutang Bakul</h2>
-          <div className="w-full sm:w-64">
+<h2 className="text-xl font-black text-[#191712]">Catatan Piutang Bakul</h2>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Input
+              type="date"
               size="sm"
-              placeholder="Cari nama/tanggal..."
-              value={search}
-              onValueChange={setSearch}
-              startContent={<Search size={14} className="text-[#706858]" />}
+              className="w-full sm:w-[160px]"
+              value={filterDate}
+              onValueChange={setFilterDate}
+              aria-label="Filter Tanggal"
               radius="sm"
               isClearable
-              onClear={() => setSearch("")}
+              onClear={() => setFilterDate("")}
             />
+            <div className="w-full sm:w-64">
+              <Input
+                size="sm"
+                placeholder="Cari nama/tanggal..."
+                value={search}
+                onValueChange={setSearch}
+                startContent={<Search size={14} className="text-[#706858]" />}
+                radius="sm"
+                isClearable
+                onClear={() => setSearch("")}
+              />
+            </div>
           </div>
         </div>
 

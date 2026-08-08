@@ -244,8 +244,10 @@ export function useAppData() {
       return;
     }
 
-    // --- Guard Daily Lock: blokir ubah/hapus rekaman tanggal lampau ---
-    const lockedFields = new Set(["sales", "bakulRecords", "ops", "stockIn", "stockOut"]);
+// --- Guard Daily Lock: blokir ubah/hapus rekaman tanggal lampau ---
+    // Catatan: "bakulRecords" (Piutang Bakul) sengaja dihapus dari daftar ini
+    // agar pengguna dapat menambah/mengubah/menghapus piutang pada hari sebelumnya.
+    const lockedFields = new Set(["sales", "ops", "stockIn", "stockOut"]);
     if (lockedFields.has(field) && (action.type === "UPDATE" || action.type === "DELETE" || action.type === "ADD")) {
       const payload = action.payload as { index?: number; value?: unknown };
       const index = payload.index;

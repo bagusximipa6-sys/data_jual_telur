@@ -57,11 +57,10 @@ async function findLockedViolation(data: AppDataSet): Promise<string | null> {
     return null;
   };
 
-  return (
+return (
     changed("Barang Masuk", (r) => r.id ?? r.date, existing.stockIn, data.stockIn) ??
     changed("Barang Keluar", (r) => r.id ?? r.date, existing.stockOut, data.stockOut) ??
     changed("Laporan Harian", (r) => r.id ?? r.date, existing.sales, data.sales) ??
-    changed("Piutang Bakul", (r) => r.id ?? r.date, existing.bakulRecords, data.bakulRecords) ??
     changed("Operasional", (r) => r.id ?? r.date, existing.ops, data.ops)
   );
 }
