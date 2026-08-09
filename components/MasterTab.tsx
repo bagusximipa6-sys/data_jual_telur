@@ -11,7 +11,7 @@ import {
   ModalContent,
   ModalHeader,
 } from "@heroui/react";
-import { AlertTriangle, Boxes, Download, History, MapPin, Plus, RefreshCw, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Boxes, Download, History, LockKeyhole, MapPin, Plus, RefreshCw, Trash2, Upload, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
 import { exportToJSON, rupiah, todayISO, toNumber } from "@/lib/utils";
 import {
@@ -331,43 +331,79 @@ items.map((item, index) => {
           </div>
         )}
 
-        {/* Riwayat Harga (Price History) */}
+{/* Riwayat Harga (Price History) — Hanya Admin (Owner) */}
         <div className="rounded-xl border border-[#191712]/10 bg-[#f7f5ef] p-4 space-y-3">
           <div className="flex items-center gap-2">
             <History size={16} className="text-[#706858]" />
             <h3 className="font-black text-sm text-[#191712]">Riwayat Harga Berbasis Tanggal (Price History)</h3>
           </div>
-          <p className="text-[11px] text-[#706858]">
-            Setiap kali harga barang diubah, entri baru dicatat (append-only). Harga lama tidak ditimpa, sehingga
-            laporan keuangan hari-hari sebelumnya tidak berubah.
-          </p>
-          {priceHistory.length === 0 ? (
-            <p className="text-xs text-[#706858]">
-              Belum ada riwayat harga. Simpan barang beserta harga untuk mencatat entri pertama.
-            </p>
+
+          {isAdmin ? (
+            <>
+              <p className="text-[11px] text-[#706858]">
+                Setiap kali harga barang diubah, entri baru dicatat (append-only). Harga lama tidak ditimpa, sehingga
+                laporan keuangan hari-hari sebelumnya tidak berubah.
+              </p>
+              {priceHistory.length === 0 ? (
+                <p className="text-xs text-[#706858]">
+                  Belum ada riwayat harga. Simpan barang beserta harga untuk mencatat entri pertama.
+                </p>
+              ) : (
+                <div className="max-h-[240px] space-y-2 overflow-y-auto pr-1">
+                  {priceHistory
+                    .slice()
+                    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt))
+                    .map((p) => {
+                      const item = items.find((i) => i.id === p.barangId);
+                      return (
+                        <div
+                          key={p.id}
+                          className="rounded-lg bg-white border border-[#191712]/10 px-3 py-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-black text-[#191712]">{item?.name ?? "(barang terhapus)"}</span>
+                            <span className="font-mono text-[10px] font-bold text-[#706858]">{p.effectiveAt}</span>
+                          </div>
+                          <div className="text-[#706858] font-medium mt-0.5">
+                            Beli <span className="text-[#8f321a] font-bold">{rupiah(p.hargaBeli)}</span>
+                            {" • "}Jual <span className="text-[#1f8f5f] font-bold">{rupiah(p.hargaJual)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </>
           ) : (
-            <div className="max-h-[240px] space-y-2 overflow-y-auto pr-1">
-              {priceHistory
-                .slice()
-                .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt))
-                .map((p) => {
-                  const item = items.find((i) => i.id === p.barangId);
-                  return (
+            <div className="relative overflow-hidden rounded-xl border border-[#191712]/10 bg-white">
+              <div
+                className="pointer-events-none select-none blur-[6px] opacity-60"
+                aria-hidden="true"
+              >
+                <div className="max-h-[150px] space-y-2 overflow-hidden p-3">
+                  {Array.from({ length: 3 }).map((_, idx) => (
                     <div
-                      key={p.id}
-                      className="rounded-lg bg-white border border-[#191712]/10 px-3 py-2 text-xs"
+                      key={idx}
+                      className="rounded-lg bg-[#f0eadb] border border-[#191712]/10 px-3 py-2 text-xs"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-black text-[#191712]">{item?.name ?? "(barang terhapus)"}</span>
-                        <span className="font-mono text-[10px] font-bold text-[#706858]">{p.effectiveAt}</span>
+                        <span className="font-black text-[#191712]">Telur Ayam</span>
+                        <span className="font-mono text-[10px] font-bold text-[#706858]">2024-01-01</span>
                       </div>
                       <div className="text-[#706858] font-medium mt-0.5">
-                        Beli <span className="text-[#8f321a] font-bold">{rupiah(p.hargaBeli)}</span>
-                        {" • "}Jual <span className="text-[#1f8f5f] font-bold">{rupiah(p.hargaJual)}</span>
+                        Beli <span className="text-[#8f321a] font-bold">Rp xx.xxx</span>
+                        {" • "}Jual <span className="text-[#1f8f5f] font-bold">Rp xx.xxx</span>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+              </div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/40 p-4 text-center">
+                <LockKeyhole size={22} className="text-[#8f321a]" />
+                <p className="rounded-lg bg-[#ffe2d8] px-3 py-2 text-xs font-bold text-[#8f321a]">
+                  🔒 Riwayat harga hanya dapat dilihat oleh Admin (Owner).
+                </p>
+              </div>
             </div>
           )}
         </div>
