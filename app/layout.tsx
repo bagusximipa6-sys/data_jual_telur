@@ -5,13 +5,10 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: "Sahabat Telur | Buku Keuangan Usaha",
   description: "Aplikasi pencatatan keuangan usaha perdagangan telur, rekap penjualan, operasional, dan tagihan piutang bakul.",
-  openGraph: {
-    title: "Sahabat Telur | Buku Keuangan Usaha",
-    description: "Aplikasi pencatatan keuangan usaha perdagangan telur, rekap penjualan, operasional, dan tagihan piutang bakul.",
-    siteName: "Sahabat Telur",
-  },
   icons: {
-    icon: "/f66c6a5a-c43e-4d5b-9105-6888d8892eb5.jpg",
+    icon: '/icon.png',
+    shortcut: '/icon.png',
+    apple: '/icon.png',
   },
 };
 
