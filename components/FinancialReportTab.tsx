@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Chip, Divider, Input } from "@heroui/react";
+import { Button, Chip, Divider, Input, Tab, Tabs } from "@heroui/react";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
@@ -142,6 +142,7 @@ const existing = dailyMap.get(record.date);
       profit,
       saleType: (record.saleType ?? "eceran") as SaleType,
       paymentMethod: record.paymentMethod,
+      createdBy: record.createdBy,
     };
 
     if (existing) {
@@ -444,17 +445,38 @@ const exportProfitPDF = (summary: ProfitLossSummary) => {
 
 export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialReportTabProps) {
   const [dateFilter, setDateFilter] = useState("");
+  const [viewRole, setViewRole] = useState<Role | "all">("all");
   const isAdmin = role === "admin";
 
+  const visibleStockOut = useMemo(() => {
+    if (viewRole === "all") return stockOut;
+    return stockOut.filter((r) => (r.createdBy ?? "user") === viewRole);
+  }, [stockOut, viewRole]);
+
   const summary = useMemo(
-    () => buildProfitLoss(stockOut, stockIn, ops),
-    [stockOut, stockIn, ops]
+    () => buildProfitLoss(visibleStockOut, stockIn, ops),
+    [visibleStockOut, stockIn, ops]
   );
 
   const filteredDaily = useMemo(() => {
     if (!dateFilter) return summary.daily;
     return summary.daily.filter((d) => d.date === dateFilter);
   }, [summary.daily, dateFilter]);
+
+  const ownerSummary = useMemo(() => {
+    const ownerStockOut = stockOut.filter(r => r.createdBy === 'admin');
+    return buildProfitLoss(ownerStockOut, stockIn, ops);
+  }, [stockOut, stockIn, ops]);
+
+  const userSummary = useMemo(() => {
+    const userStockOut = stockOut.filter(r => r.createdBy !== 'admin');
+    return buildProfitLoss(userStockOut, stockIn, ops);
+  }, [stockOut, stockIn, ops]);
+
+  const combinedSummary = useMemo(
+    () => buildProfitLoss(stockOut, stockIn, ops),
+    [stockOut, stockIn, ops]
+  );
 
   return (
     <div className="space-y-6">
@@ -508,6 +530,40 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
       ) : (
         <>
 {/* Summary Cards */}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard label="Laba Bersih Owner" value={rupiah(ownerSummary.netProfit)} tone="green" />
+            <SummaryCard label="Laba Bersih User" value={rupiah(userSummary.netProfit)} tone="green" />
+            <SummaryCard label="Laba Bersih Gabungan" value={rupiah(combinedSummary.netProfit)} tone="purple" />
+            <SummaryCard label="Total Omzet Gabungan" value={rupiah(combinedSummary.totalOmzet)} tone="blue" />
+          </div>
+
+          {/* Role view switcher */}
+          <div className="rounded-2xl border border-[#191712]/10 bg-white p-5 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black text-[#191712]">Tampilan Laporan Laba Rugi</h3>
+                <p className="text-xs text-[#706858]">Pilih data penjualan yang ingin Anda lihat: Owner, User, atau Gabungan.</p>
+              </div>
+              <Tabs
+                fullWidth
+                size="sm"
+                radius="sm"
+                selectedKey={viewRole}
+                onSelectionChange={(key) => setViewRole(key as Role | "all")}
+                classNames={{
+                  tabList: "w-full sm:w-auto bg-[#f0eadb] shadow-inner p-1",
+                  cursor: "bg-[#191712] shadow-sm",
+                  tabContent: "font-bold text-[#6f6758] group-data-[selected=true]:text-white",
+                }}
+              >
+                <Tab key="all" title="Gabungan" />
+                <Tab key="admin" title="Owner" />
+                <Tab key="user" title="User" />
+              </Tabs>
+            </div>
+          </div>
+
+          {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <SummaryCard label="Total Barang Keluar" value={`${shortNumber(summary.totalQuantity)} kg`} tone="plain" />
             <SummaryCard label="Total Omzet / Penjualan" value={rupiah(summary.totalOmzet)} tone="blue" />
@@ -801,4 +857,3 @@ label: string;
     </div>
   );
 }
-

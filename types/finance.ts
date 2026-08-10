@@ -71,6 +71,7 @@ export type StockOutRecord = {
   buyPriceSnapshot?: number; // snapshot harga beli pada saat transaksi
   saleType?: "eceran" | "grosir";
   paymentMethod?: "cash" | "transfer" | "hutang";
+  createdBy?: Role;
 };
 
 export type PiutangPayment = {

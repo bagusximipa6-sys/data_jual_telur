@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const alt = "Buku Keuangan Usaha - Data Penjualan Telur";
+export const alt = "Sahabat Telur - Data Penjualan Telur";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -35,7 +35,7 @@ export default async function OgImage() {
             alignItems: "center",
           }}
         >
-          📒 Buku Keuangan
+          Sahabat Telur
         </div>
         <div
           style={{

@@ -13,11 +13,12 @@ import {
   SelectItem,
   Tab,
   Tabs,
+  Tooltip,
 } from "@heroui/react";
 import { AlertCircle, Edit2, Lock, Plus, Printer, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { getActivePrice, rupiah, shortNumber, toNumber } from "@/lib/utils";
-import { BakulRecord, ItemMaster, PriceHistory, StockOutRecord } from "@/types/finance";
+import { BakulRecord, ItemMaster, PriceHistory, Role, StockOutRecord } from "@/types/finance";
 
 interface StockOutTabProps {
   stockOut: StockOutRecord[];
@@ -30,6 +31,7 @@ interface StockOutTabProps {
   onUpdateStockOut: (index: number, record: StockOutRecord) => void;
   onDeleteStockOut: (index: number) => void;
   onAddBakul: (record: BakulRecord) => void;
+  role: Role;
 }
 
 const DEFAULT_DATE = new Date().toISOString().slice(0, 10);
@@ -48,10 +50,14 @@ export function StockOutTab({
   onUpdateStockOut,
   onDeleteStockOut,
   onAddBakul,
+  role,
 }: StockOutTabProps) {
   const [search, setSearch] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
+
+  const [inputMode, setInputMode] = useState<"quantity" | "nominal">("quantity");
+  const [nominalValue, setNominalValue] = useState("");
 
   const [form, setForm] = useState({
     date: DEFAULT_DATE,
@@ -70,8 +76,17 @@ export function StockOutTab({
   );
 
   const autoPrice = selectedItemMaster?.sellPrice || 0;
-  const quantityNum = toNumber(form.quantity);
   const priceNum = form.saleType === "grosir" ? toNumber(form.price) : autoPrice;
+
+  // Determine quantity based on input mode
+  const nominalNum = toNumber(nominalValue);
+  const quantityNum = useMemo(() => {
+    if (inputMode === "nominal") {
+      return priceNum > 0 ? nominalNum / priceNum : 0;
+    }
+    return toNumber(form.quantity);
+  }, [inputMode, form.quantity, nominalNum, priceNum]);
+
   const totalAuto = priceNum * quantityNum;
 
 const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
@@ -85,6 +100,8 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
       paymentMethod: item.paymentMethod ?? "cash",
       price: item.saleType === "grosir" ? String(item.price) : "",
     });
+    setInputMode("quantity");
+    setNominalValue("");
   };
 
   const handleCancelEdit = () => {
@@ -98,6 +115,8 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
       paymentMethod: "cash",
       price: "",
     });
+    setInputMode("quantity");
+    setNominalValue("");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -131,6 +150,7 @@ const hargaBeliSnapshot = activePrice ? activePrice.hargaBeli : (masterItem?.buy
       buyPriceSnapshot: hargaBeliSnapshot,
       saleType: form.saleType,
       paymentMethod: form.paymentMethod,
+      createdBy: isNew ? role : stockOut[editingIndex]?.createdBy,
     };
 
 if (isNew) {
@@ -299,18 +319,52 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
             )}
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-[#191712]">Stok Keluar (kg)</label>
-            <Input
-              labelPlacement="outside"
-              placeholder="cth. 1.5"
-              value={form.quantity}
-              onValueChange={(quantity) => setForm((prev) => ({ ...prev, quantity }))}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-[#191712]">Mode Input</label>
+            <Tabs
+              fullWidth
+              size="sm"
               radius="sm"
-              required
-              endContent={<span className="text-xs font-bold text-[#706858]">kg</span>}
-            />
+              selectedKey={inputMode}
+              onSelectionChange={(key) => setInputMode(key as "quantity" | "nominal")}
+              classNames={{
+                tabList: "w-full sm:w-auto bg-[#f0eadb] shadow-inner p-1",
+                cursor: "bg-[#191712] shadow-sm",
+                tabContent: "font-bold text-[#6f6758] group-data-[selected=true]:text-white",
+              }}
+            >
+              <Tab key="quantity" title="Input per Berat (kg)" />
+              <Tab key="nominal" title="Input per Nominal (Rp)" />
+            </Tabs>
           </div>
+
+          {inputMode === "quantity" ? (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-[#191712]">Stok Keluar (kg)</label>
+              <Input
+                labelPlacement="outside"
+                placeholder="cth. 1.5"
+                value={form.quantity}
+                onValueChange={(quantity) => setForm((prev) => ({ ...prev, quantity }))}
+                radius="sm"
+                required
+                endContent={<span className="text-xs font-bold text-[#706858]">kg</span>}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-[#191712]">Nominal Pembelian (Rp)</label>
+              <Input
+                labelPlacement="outside"
+                placeholder="cth. 20000"
+                value={nominalValue}
+                onValueChange={setNominalValue}
+                radius="sm"
+                required
+                startContent={<span className="text-xs font-bold text-[#706858]">Rp</span>}
+              />
+            </div>
+          )}
 
           <div className="space-y-1">
             <label className="text-xs font-semibold text-[#191712]">Jenis Penjualan</label>
@@ -387,6 +441,16 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
               <span className="font-mono font-black text-[#191712]">{rupiah(priceNum)}</span>
             </div>
             <div className="flex justify-between text-xs">
+              <span className="font-bold text-[#706858]">
+                Berat Dihitung {inputMode === "nominal" && "(Otomatis)"}
+              </span>
+              <Tooltip content={inputMode === "nominal" ? `Hasil hitung dari ${rupiah(nominalNum)} / ${rupiah(priceNum)} per kg` : "Input manual"} radius="sm">
+                <span className="font-mono font-black text-[#191712] underline decoration-dotted">
+                 {shortNumber(quantityNum)} kg
+                </span>
+              </Tooltip>
+            </div>
+            <div className="flex justify-between text-sm">
               <span className="font-bold text-[#706858]">Total Penjualan</span>
               <span className="font-mono font-black text-[#1f8f5f]">{rupiah(totalAuto)}</span>
             </div>

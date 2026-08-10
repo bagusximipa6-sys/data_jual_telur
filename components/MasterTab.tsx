@@ -64,7 +64,6 @@ interface MasterTabProps {
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 export function MasterTab({
-  categories,
   sales,
   bakulRecords,
   ops,

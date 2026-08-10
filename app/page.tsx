@@ -16,7 +16,6 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import type { Key } from "react";
 import { useMemo, useState } from "react";
 
 import { BakulTab } from "@/components/BakulTab";
@@ -41,7 +40,7 @@ import {
 } from "@/types/finance";
 
 export default function Home() {
-const { state, dispatch, dataLoaded, isClient, loading, loadError, lockError, syncStatus, reload, handleResetData, priceHistory, isRecordLocked } =
+const { state, dispatch, isClient, loading, loadError, lockError, syncStatus, reload, handleResetData, priceHistory, isRecordLocked } =
     useAppData();
   const { sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories } = state;
   const { role, adminUnlocked, handleUnlockAdmin, handleLogoutAdmin, handleRoleChange } = useAuth();
@@ -57,30 +56,33 @@ const { state, dispatch, dataLoaded, isClient, loading, loadError, lockError, sy
     return latest || new Date().toISOString().slice(0, 10);
   });
 
-  const menuGroups = [
-    {
-      title: "Laporan",
-      items: [
-        { key: "dashboard", label: "Laporan Harian", icon: ClipboardList, adminOnly: false },
-        { key: "laporan", label: "Laba & Rugi", icon: FileBarChart, adminOnly: true },
-      ],
-    },
-    {
-      title: "Transaksi",
-      items: [
-        { key: "stockin", label: "Barang Masuk", icon: PackagePlus, adminOnly: true },
-        { key: "stockout", label: "Barang Keluar", icon: Package, adminOnly: false },
-        { key: "ops", label: "Operasional", icon: HandCoins, adminOnly: true },
-      ],
-    },
-    {
-      title: "Data & Pengaturan",
-      items: [
-        { key: "bakul", label: "Piutang Bakul", icon: Users, adminOnly: false },
-        { key: "master", label: "Master & Data", icon: Database, adminOnly: false },
-      ],
-    },
-  ];
+  const menuGroups = useMemo(
+    () => [
+      {
+        title: "Laporan",
+        items: [
+          { key: "dashboard", label: "Laporan Harian", icon: ClipboardList, adminOnly: false },
+          { key: "laporan", label: "Laba & Rugi", icon: FileBarChart, adminOnly: true },
+        ],
+      },
+      {
+        title: "Transaksi",
+        items: [
+          { key: "stockin", label: "Barang Masuk", icon: PackagePlus, adminOnly: true },
+          { key: "stockout", label: "Barang Keluar", icon: Package, adminOnly: false },
+          { key: "ops", label: "Operasional", icon: HandCoins, adminOnly: true },
+        ],
+      },
+      {
+        title: "Data & Pengaturan",
+        items: [
+          { key: "bakul", label: "Piutang Bakul", icon: Users, adminOnly: false },
+          { key: "master", label: "Master & Data", icon: Database, adminOnly: false },
+        ],
+      },
+    ],
+    []
+  );
 
 // Derive the effective menu during render: if a user role is on an admin-only menu,
   // fall back to "dashboard" instead of resetting state in an effect.
@@ -112,15 +114,22 @@ const { state, dispatch, dataLoaded, isClient, loading, loadError, lockError, sy
     return bakulRecords.filter((b) => b.date.startsWith(selectedMonth));
   }, [bakulRecords, selectedMonth]);
 
+  // Filter stockOut records based on role. Admin sees all, user sees their own.
+  const visibleStockOut = useMemo(() => {
+    if (role === "admin") return stockOut;
+    // When createdBy is not set, assume it's visible to all for backward compatibility.
+    return stockOut.filter((r) => !r.createdBy || r.createdBy === "user");
+  }, [stockOut, role]);
+
   // === Laporan Harian: rekap barang keluar & omzet per tanggal ===
   const availableReportDates = useMemo(
-    () => unique(stockOut.map((r) => r.date)).sort().reverse(),
-    [stockOut]
+    () => unique(visibleStockOut.map((r) => r.date)).sort().reverse(),
+    [visibleStockOut]
   );
 
   const dailyRecords = useMemo(
-    () => stockOut.filter((r) => r.date === reportDate),
-    [stockOut, reportDate]
+    () => visibleStockOut.filter((r) => r.date === reportDate),
+    [visibleStockOut, reportDate]
   );
 
   const dailyQty = useMemo(() => dailyRecords.reduce((sum, r) => sum + r.quantity, 0), [dailyRecords]);
@@ -142,11 +151,11 @@ const dailyItemSummary = useMemo(() => {
     const stockInTotal = stockIn
       .filter((r) => r.date <= reportDate)
       .reduce((sum, r) => sum + r.quantity, 0);
-    const stockOutTotal = stockOut
+    const stockOutTotal = visibleStockOut
       .filter((r) => r.date <= reportDate)
       .reduce((sum, r) => sum + r.quantity, 0);
     return stockInTotal - stockOutTotal;
-  }, [stockIn, stockOut, reportDate]);
+  }, [stockIn, visibleStockOut, reportDate]);
 
   // === Harga Telur Hari Ini ===
   // Sumber: Master Barang (sellPrice) + transaksi Barang Keluar pada tanggal terpilih
@@ -182,22 +191,6 @@ const dailyItemSummary = useMemo(() => {
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [items, dailyRecords]);
-
-  // Bakul Summary Item breakdown (filtered by month)
-  const bakulSummary = useMemo(
-    () =>
-      unique(filteredBakul.map((item) => item.name)).map((name) => {
-        const rows = filteredBakul.filter((item) => item.name === name);
-        return {
-          name,
-          bill: rows.reduce((sum, item) => sum + item.bill, 0),
-          paid: rows.reduce((sum, item) => sum + item.paid, 0),
-          balance: rows.reduce((sum, item) => sum + item.balance, 0),
-          count: rows.length,
-        };
-      }),
-    [filteredBakul]
-  );
 
 const bakulNames = useMemo(() => unique(bakulMasters.map((item) => item.name)), [bakulMasters]);
   const itemNames = useMemo(() => unique(items.map((item) => item.name)), [items]);
@@ -613,7 +606,7 @@ const active = effectiveMenu === key;
 
 {effectiveMenu === "stockout" && (
 <StockOutTab
-              stockOut={stockOut}
+              stockOut={visibleStockOut}
               itemNames={itemNames}
               bakulNames={bakulNames}
               items={items}
@@ -623,6 +616,7 @@ const active = effectiveMenu === key;
               onUpdateStockOut={handleUpdateStockOut}
               onDeleteStockOut={handleDeleteStockOut}
               onAddBakul={handleAddBakul}
+              role={role}
             />
           )}
 
