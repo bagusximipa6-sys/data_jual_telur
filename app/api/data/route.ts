@@ -4,17 +4,20 @@ import { isAdminRequest, unauthorizedResponse } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// Tanggal hari ini dalam format ISO (YYYY-MM-DD) menggunakan zona waktu lokal.
+// Tanggal hari ini dalam format ISO (YYYY-MM-DD) menggunakan zona waktu 'Asia/Jakarta'.
+// Ini memastikan konsistensi antara server Vercel (UTC) dan localhost (WIB).
 function todayISO(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
+  const d = new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta", year: 'numeric', month: '2-digit', day: '2-digit' });
+  // toLocaleString dengan en-CA menghasilkan format 'YYYY-MM-DD'
+  return d;
 }
 
 // Cek apakah sebuah tanggal sudah lewat / terkunci (lebih kecil dari tanggal hari ini).
 function isLockedDate(dateISO: string): boolean {
   if (!dateISO) return false;
+  // Perbandingan string 'YYYY-MM-DD' aman digunakan.
+  // Dengan todayISO() yang sudah diatur ke 'Asia/Jakarta', logika ini akan konsisten
+  // di semua lingkungan.
   return dateISO < todayISO();
 }
 
@@ -24,32 +27,50 @@ function isLockedDate(dateISO: string): boolean {
 // atau DIMODIFIKASI (kandungannya berubah). Record lama yang diterima
 // apa adanya (read-only) tetap dipersilakan.
 type DatedRow = { id?: string; date: string };
+type IdentifiedDatedRow = DatedRow & { id: string };
+
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalValue);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, value]) => value !== undefined)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => [key, canonicalValue(value)])
+    );
+  }
+
+  return value;
+}
 
 function canonical(r: unknown): string {
-  return JSON.stringify(r);
+  return JSON.stringify(canonicalValue(r));
 }
 
 async function findLockedViolation(data: AppDataSet): Promise<string | null> {
   const existing = await loadAllData();
-  const today = todayISO();
 
-  const changed = (
+  const changedById = (
     label: string,
-    key: (r: DatedRow) => string,
-    before: DatedRow[],
-    after: DatedRow[]
+    before: IdentifiedDatedRow[],
+    after: IdentifiedDatedRow[]
   ): string | null => {
-    const afterIds = new Set(after.map((r) => key(r)));
+    const afterById = new Map(after.map((r) => [r.id, r]));
+
     // Dihapus / hilang?
     for (const r of before) {
-      if (isLockedDate(r.date) && r.date < today && !afterIds.has(key(r))) {
+      if (isLockedDate(r.date) && !afterById.has(r.id)) {
         return `Data ${label} tanggal ${r.date} sudah terkunci (hari lalu) dan tidak dapat dihapus.`;
       }
     }
+
     // Dimodifikasi?
     for (const r of before) {
-      if (!isLockedDate(r.date)) continue;
-      const afterRec = after.find((a) => key(a) === key(r));
+      if (!isLockedDate(r.date)) continue; // Lewati jika data hari ini atau masa depan
+      const afterRec = afterById.get(r.id);
       if (afterRec && canonical(r) !== canonical(afterRec)) {
         return `Data ${label} tanggal ${r.date} sudah terkunci (hari lalu) dan tidak dapat diubah.`;
       }
@@ -57,11 +78,37 @@ async function findLockedViolation(data: AppDataSet): Promise<string | null> {
     return null;
   };
 
-return (
-    changed("Barang Masuk", (r) => r.id ?? r.date, existing.stockIn, data.stockIn) ??
-    changed("Barang Keluar", (r) => r.id ?? r.date, existing.stockOut, data.stockOut) ??
-    changed("Laporan Harian", (r) => r.id ?? r.date, existing.sales, data.sales) ??
-    changed("Operasional", (r) => r.id ?? r.date, existing.ops, data.ops)
+  const changedByValue = (
+    label: string,
+    before: DatedRow[],
+    after: DatedRow[]
+  ): string | null => {
+    const afterCounts = new Map<string, number>();
+
+    for (const r of after) {
+      const key = canonical(r);
+      afterCounts.set(key, (afterCounts.get(key) ?? 0) + 1);
+    }
+
+    for (const r of before) {
+      if (!isLockedDate(r.date)) continue;
+
+      const key = canonical(r);
+      const count = afterCounts.get(key) ?? 0;
+      if (count <= 0) {
+        return `Data ${label} tanggal ${r.date} sudah terkunci (hari lalu) dan tidak dapat diubah atau dihapus.`;
+      }
+      afterCounts.set(key, count - 1);
+    }
+
+    return null;
+  };
+
+  return (
+    changedById("Barang Masuk", existing.stockIn, data.stockIn) ??
+    changedById("Barang Keluar", existing.stockOut, data.stockOut) ??
+    changedByValue("Laporan Harian", existing.sales, data.sales) ??
+    changedByValue("Operasional", existing.ops, data.ops)
   );
 }
 

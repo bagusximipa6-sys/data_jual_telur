@@ -188,14 +188,16 @@ const existing = dailyMap.get(record.date);
   const monthlyMap = new Map<string, ProfitLossSummary["monthly"][number]>();
 
   for (const day of daily) {
-    const date = new Date(`${day.date}T00:00:00`);
-    const dayIdx = date.getDay(); // 0 = Sun, 6 = Sat
+    // Penting: Buat objek Date baru untuk setiap kalkulasi agar tidak ada mutasi.
+    // Jangan gunakan kembali objek `date` karena metode seperti `setDate` memodifikasi objeknya.
+    const baseDate = new Date(`${day.date}T00:00:00Z`); // Gunakan UTC 'Z' untuk konsistensi
+    const dayIdx = baseDate.getUTCDay(); // 0 = Sun, 6 = Sat
     // Offset to reach the Saturday that ends the current week
     const saturdayOffset = (6 - dayIdx + 7) % 7;
-    const saturday = new Date(date);
-    saturday.setDate(date.getDate() + saturdayOffset);
+    const saturday = new Date(baseDate);
+    saturday.setUTCDate(baseDate.getUTCDate() + saturdayOffset);
     const sunday = new Date(saturday);
-    sunday.setDate(saturday.getDate() - 6);
+    sunday.setUTCDate(saturday.getUTCDate() - 6);
 
     const fmt = (d: Date) => {
       const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -463,21 +465,6 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
     return summary.daily.filter((d) => d.date === dateFilter);
   }, [summary.daily, dateFilter]);
 
-  const ownerSummary = useMemo(() => {
-    const ownerStockOut = stockOut.filter(r => r.createdBy === 'admin');
-    return buildProfitLoss(ownerStockOut, stockIn, ops);
-  }, [stockOut, stockIn, ops]);
-
-  const userSummary = useMemo(() => {
-    const userStockOut = stockOut.filter(r => r.createdBy !== 'admin');
-    return buildProfitLoss(userStockOut, stockIn, ops);
-  }, [stockOut, stockIn, ops]);
-
-  const combinedSummary = useMemo(
-    () => buildProfitLoss(stockOut, stockIn, ops),
-    [stockOut, stockIn, ops]
-  );
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -524,15 +511,25 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
 
       <>
 {/* Summary Cards */}
-        {isAdmin && (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard label="Laba Bersih Owner" value={rupiah(ownerSummary.netProfit)} tone="green" />
-            <SummaryCard label="Laba Bersih User" value={rupiah(userSummary.netProfit)} tone="green" />
-            <SummaryCard label="Laba Bersih Gabungan" value={rupiah(combinedSummary.netProfit)} tone="purple" />
-            <SummaryCard label="Total Omzet Gabungan" value={rupiah(combinedSummary.totalOmzet)} tone="blue" />
-          </div>
+        {isAdmin &&
+          (() => {
+            // Kalkulasi ringkasan Owner/User/Gabungan dibuat lebih efisien,
+            // hanya jika admin. Tidak lagi menggunakan useMemo yang berlebihan.
+            const ownerStockOut = stockOut.filter((r) => r.createdBy === "admin");
+            const ownerSummary = buildProfitLoss(ownerStockOut, stockIn, ops);
+            const userStockOut = stockOut.filter((r) => r.createdBy !== "admin");
+            const userSummary = buildProfitLoss(userStockOut, stockIn, ops);
+            const combinedSummary = buildProfitLoss(stockOut, stockIn, ops);
 
-        )}
+            return (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <SummaryCard label="Laba Bersih Owner" value={rupiah(ownerSummary.netProfit)} tone="green" />
+                <SummaryCard label="Laba Bersih User" value={rupiah(userSummary.netProfit)} tone="green" />
+                <SummaryCard label="Laba Bersih Gabungan" value={rupiah(combinedSummary.netProfit)} tone="purple" />
+                <SummaryCard label="Total Omzet Gabungan" value={rupiah(combinedSummary.totalOmzet)} tone="blue" />
+              </div>
+            );
+          })()}
         {/* Role view switcher */}
         {isAdmin && (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

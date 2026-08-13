@@ -178,11 +178,14 @@ if (isNew) {
     handleCancelEdit();
   };
 
-  const filteredRecords = useMemo(() => stockOut
+  const filteredRecords = useMemo(() => stockOut // <-- `stockOut` is the full, unfiltered list from props
     .map((item, originalIndex) => ({ item, originalIndex }))
     .filter(({ item }) => {
       // Role-based filtering: User only sees their own records. Admin sees all.
-      if (role === "user" && (item.createdBy ?? "user") !== "user") return false;
+      // This filtering is now correctly applied only for rendering the list.
+      // The global `stockOut` state remains complete.
+      const isVisibleToUser = role === "admin" || (item.createdBy ?? "user") === role;
+      if (!isVisibleToUser) return false;
 
       if (reportDate && item.date !== reportDate) return false;
       if (!search.trim() && !reportDate) return true;
@@ -193,14 +196,17 @@ if (isNew) {
         item.bakulName.toLowerCase().includes(query) ||
         item.date.includes(query)
       );
-    }), [stockOut, role, reportDate, search]);
+    }), [stockOut, role, reportDate, search]); // Dependencies are correct
 
-  // Calculate total stock out per item
-  const stockOutTotals = stockOut.reduce((acc, item) => {
-    const key = item.itemName.toLowerCase();
-    acc[key] = (acc[key] || 0) + item.quantity;
-    return acc;
-  }, {} as Record<string, number>);
+  // Calculate total stock out per item from the records visible to the current user.
+  // This prevents re-renders from causing issues with data the user can't see.
+  const stockOutTotals = useMemo(() => {
+    return filteredRecords.reduce((acc, { item }) => {
+      const key = item.itemName.toLowerCase();
+      acc[key] = (acc[key] || 0) + item.quantity;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [filteredRecords]);
 
 const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
 
