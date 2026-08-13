@@ -32,6 +32,8 @@ interface StockOutTabProps {
   onDeleteStockOut: (index: number) => void;
   onAddBakul: (record: BakulRecord) => void;
   role: Role;
+  reportDate?: string;
+  onReportDateChange?: (date: string) => void;
 }
 
 const DEFAULT_DATE = new Date().toISOString().slice(0, 10);
@@ -51,6 +53,8 @@ export function StockOutTab({
   onDeleteStockOut,
   onAddBakul,
   role,
+  reportDate,
+  onReportDateChange,
 }: StockOutTabProps) {
   const [search, setSearch] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -149,7 +153,7 @@ const hargaBeliSnapshot = activePrice ? activePrice.hargaBeli : (masterItem?.buy
       price: priceNum,
       buyPriceSnapshot: hargaBeliSnapshot,
       saleType: form.saleType,
-      paymentMethod: form.paymentMethod,
+      paymentMethod: form.paymentMethod, // When admin creates, it should be 'admin', not the current view role.
       createdBy: isNew ? role : stockOut[editingIndex]?.createdBy,
     };
 
@@ -174,17 +178,22 @@ if (isNew) {
     handleCancelEdit();
   };
 
-  const filteredRecords = stockOut
+  const filteredRecords = useMemo(() => stockOut
     .map((item, originalIndex) => ({ item, originalIndex }))
     .filter(({ item }) => {
-      if (!search.trim()) return true;
+      // Role-based filtering: User only sees their own records. Admin sees all.
+      if (role === "user" && (item.createdBy ?? "user") !== "user") return false;
+
+      if (reportDate && item.date !== reportDate) return false;
+      if (!search.trim() && !reportDate) return true;
+      if (!search.trim() && reportDate) return item.date === reportDate;
       const query = search.toLowerCase();
       return (
         item.itemName.toLowerCase().includes(query) ||
         item.bakulName.toLowerCase().includes(query) ||
         item.date.includes(query)
       );
-    });
+    }), [stockOut, role, reportDate, search]);
 
   // Calculate total stock out per item
   const stockOutTotals = stockOut.reduce((acc, item) => {
@@ -478,17 +487,32 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
       <div className="rounded-2xl border border-[#191712]/10 bg-white p-5 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-black text-[#191712]">Riwayat Barang Keluar</h2>
-          <div className="w-full sm:w-64">
-            <Input
-              size="sm"
-              placeholder="Cari barang/bakul/tanggal..."
-              value={search}
-              onValueChange={setSearch}
-              startContent={<Search size={14} className="text-[#706858]" />}
-              radius="sm"
-              isClearable
-              onClear={() => setSearch("")}
-            />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {onReportDateChange && (
+              <Input
+                type="date"
+                size="sm"
+                className="w-full sm:w-[180px]"
+                value={reportDate}
+                onValueChange={onReportDateChange}
+                aria-label="Pilih Tanggal Laporan"
+                radius="sm"
+                isClearable
+                onClear={() => onReportDateChange("")}
+              />
+            )}
+            <div className="w-full sm:w-64">
+              <Input
+                size="sm"
+                placeholder="Cari barang/bakul..."
+                value={search}
+                onValueChange={setSearch}
+                startContent={<Search size={14} className="text-[#706858]" />}
+                radius="sm"
+                isClearable
+                onClear={() => setSearch("")}
+              />
+            </div>
           </div>
         </div>
 
@@ -518,6 +542,8 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
           ) : (
             filteredRecords.map(({ item, originalIndex }) => {
               const locked = isRecordLocked(item.date);
+              const canEdit = !locked && (role === "admin" || (item.createdBy ?? "user") === "user");
+
               return (
               <Card
                 key={item.id}
@@ -578,7 +604,7 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
                       >
                         Struk
                       </Button>
-                      {!locked && (
+                      {canEdit && (
                         <>
                       <Button
                         size="sm"

@@ -26,6 +26,8 @@ interface StockInTabProps {
   onAddStockIn: (record: StockInRecord) => void;
   onUpdateStockIn: (index: number, record: StockInRecord) => void;
   onDeleteStockIn: (index: number) => void;
+  reportDate?: string;
+  onReportDateChange?: (date: string) => void;
 }
 
 const DEFAULT_DATE = new Date().toISOString().slice(0, 10);
@@ -37,11 +39,12 @@ export function StockInTab({
   stockIn,
   itemNames,
   role,
-  priceHistory,
   isRecordLocked,
   onAddStockIn,
   onUpdateStockIn,
   onDeleteStockIn,
+  reportDate,
+  onReportDateChange,
 }: StockInTabProps) {
   const [search, setSearch] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -103,11 +106,13 @@ const [form, setForm] = useState({
   const filteredRecords = stockIn
     .map((item, originalIndex) => ({ item, originalIndex }))
     .filter(({ item }) => {
-      if (!search.trim()) return true;
+      if (reportDate && item.date !== reportDate) return false;
+      if (!search.trim() && !reportDate) return true;
+      if (!search.trim() && reportDate) return item.date === reportDate;
       const query = search.toLowerCase();
       return (
         item.itemName.toLowerCase().includes(query) ||
-        item.date.includes(query)
+        (item.date.includes(query) && !reportDate)
       );
     });
 
@@ -222,17 +227,32 @@ const [form, setForm] = useState({
         <div className="rounded-2xl border border-[#191712]/10 bg-white p-5 shadow-sm sm:p-6 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-black text-[#191712]">Riwayat Barang Masuk</h2>
-            <div className="w-full sm:w-64">
-              <Input
-                size="sm"
-                placeholder="Cari barang/tanggal..."
-                value={search}
-                onValueChange={setSearch}
-                startContent={<Search size={14} className="text-[#706858]" />}
-                radius="sm"
-                isClearable
-                onClear={() => setSearch("")}
-              />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {onReportDateChange && (
+                <Input
+                  type="date"
+                  size="sm"
+                  className="w-full sm:w-[180px]"
+                  value={reportDate}
+                  onValueChange={onReportDateChange}
+                  aria-label="Pilih Tanggal Laporan"
+                  radius="sm"
+                  isClearable
+                  onClear={() => onReportDateChange("")}
+                />
+              )}
+              <div className="w-full sm:w-64">
+                <Input
+                  size="sm"
+                  placeholder="Cari barang..."
+                  value={search}
+                  onValueChange={setSearch}
+                  startContent={<Search size={14} className="text-[#706858]" />}
+                  radius="sm"
+                  isClearable
+                  onClear={() => setSearch("")}
+                />
+              </div>
             </div>
           </div>
 
@@ -350,4 +370,3 @@ const [form, setForm] = useState({
     </div>
   );
 }
-

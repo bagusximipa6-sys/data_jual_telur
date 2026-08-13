@@ -62,7 +62,7 @@ const { state, dispatch, isClient, loading, loadError, lockError, syncStatus, re
         title: "Laporan",
         items: [
           { key: "dashboard", label: "Laporan Harian", icon: ClipboardList, adminOnly: false },
-          { key: "laporan", label: "Laba & Rugi", icon: FileBarChart, adminOnly: true },
+          { key: "laporan", label: "Laba & Rugi", icon: FileBarChart, adminOnly: false },
         ],
       },
       {
@@ -118,7 +118,7 @@ const { state, dispatch, isClient, loading, loadError, lockError, syncStatus, re
   const visibleStockOut = useMemo(() => {
     if (role === "admin") return stockOut;
     // When createdBy is not set, assume it's visible to all for backward compatibility.
-    return stockOut.filter((r) => !r.createdBy || r.createdBy === "user");
+    return stockOut.filter((r) => (r.createdBy ?? "user") === "user");
   }, [stockOut, role]);
 
   // === Laporan Harian: rekap barang keluar & omzet per tanggal ===
@@ -599,6 +599,8 @@ const active = effectiveMenu === key;
               priceHistory={priceHistory}
               isRecordLocked={isRecordLocked}
               onAddStockIn={handleAddStockIn}
+              reportDate={reportDate}
+              onReportDateChange={setReportDate}
               onUpdateStockIn={handleUpdateStockIn}
               onDeleteStockIn={handleDeleteStockIn}
             />
@@ -613,6 +615,8 @@ const active = effectiveMenu === key;
               priceHistory={priceHistory}
               isRecordLocked={isRecordLocked}
               onAddStockOut={handleAddStockOut}
+              reportDate={reportDate}
+              onReportDateChange={setReportDate}
               onUpdateStockOut={handleUpdateStockOut}
               onDeleteStockOut={handleDeleteStockOut}
               onAddBakul={handleAddBakul}

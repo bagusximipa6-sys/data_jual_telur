@@ -445,7 +445,7 @@ const exportProfitPDF = (summary: ProfitLossSummary) => {
 
 export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialReportTabProps) {
   const [dateFilter, setDateFilter] = useState("");
-  const [viewRole, setViewRole] = useState<Role | "all">("all");
+  const [viewRole, setViewRole] = useState<Role | "all">(() => role === "admin" ? "all" : "user");
   const isAdmin = role === "admin";
 
   const visibleStockOut = useMemo(() => {
@@ -522,14 +522,9 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
         </div>
       </div>
 
-      {!isAdmin ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-medium text-amber-900">
-          🔒 <strong>Laporan Keuangan & Laba Rugi</strong> khusus Owner (Mode Admin). Silakan buka Mode Admin
-          terlebih dahulu untuk melihat laporan.
-        </div>
-      ) : (
-        <>
+      <>
 {/* Summary Cards */}
+        {isAdmin && (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <SummaryCard label="Laba Bersih Owner" value={rupiah(ownerSummary.netProfit)} tone="green" />
             <SummaryCard label="Laba Bersih User" value={rupiah(userSummary.netProfit)} tone="green" />
@@ -537,8 +532,9 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
             <SummaryCard label="Total Omzet Gabungan" value={rupiah(combinedSummary.totalOmzet)} tone="blue" />
           </div>
 
-          {/* Role view switcher */}
-          <div className="rounded-2xl border border-[#191712]/10 bg-white p-5 shadow-sm space-y-4">
+        )}
+        {/* Role view switcher */}
+        {isAdmin && (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h3 className="text-lg font-black text-[#191712]">Tampilan Laporan Laba Rugi</h3>
@@ -561,41 +557,49 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                 <Tab key="user" title="User" />
               </Tabs>
             </div>
-          </div>
+        )}
 
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <SummaryCard label="Total Barang Keluar" value={`${shortNumber(summary.totalQuantity)} kg`} tone="plain" />
             <SummaryCard label="Total Omzet / Penjualan" value={rupiah(summary.totalOmzet)} tone="blue" />
-            <SummaryCard label="Total Modal (Harga Beli)" value={rupiah(summary.totalModal)} tone="yellow" />
-            <SummaryCard
-              label="Total Laba Kotor"
-              value={rupiah(summary.totalProfit)}
-              tone={summary.totalProfit >= 0 ? "green" : "red"}
-            />
+            {isAdmin && (
+              <>
+                <SummaryCard label="Total Modal (Harga Beli)" value={rupiah(summary.totalModal)} tone="yellow" />
+                <SummaryCard
+                  label="Total Laba Kotor"
+                  value={rupiah(summary.totalProfit)}
+                  tone={summary.totalProfit >= 0 ? "green" : "red"}
+                />
+              </>
+            )}
           </div>
 
 {/* Detail: Operasional & Grosir/Eceran */}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard
-              label="Biaya Operasional"
-              value={rupiah(summary.totalOperational)}
-              tone="red"
-            />
-            <SummaryCard
-              label="Laba Bersih (Setelah Ops)"
-              value={rupiah(summary.netProfit)}
-              tone={summary.netProfit >= 0 ? "green" : "red"}
-            />
+            {isAdmin && (
+              <>
+                <SummaryCard
+                  label="Biaya Operasional"
+                  value={rupiah(summary.totalOperational)}
+                  tone="red"
+                />
+                <SummaryCard
+                  label="Laba Bersih (Setelah Ops)"
+                  value={rupiah(summary.netProfit)}
+                  tone={summary.netProfit >= 0 ? "green" : "red"}
+                />
+              </>
+            )}
             <SummaryCard
               label="Penjualan Eceran"
               value={`${shortNumber(summary.saleBreakdown.eceranQty)} kg • ${rupiah(summary.saleBreakdown.eceranOmzet)}`}
-              tone="blue"
+              tone={isAdmin ? "blue" : "plain"}
             />
             <SummaryCard
               label="Penjualan Grosir"
               value={`${shortNumber(summary.saleBreakdown.grosirQty)} kg • ${rupiah(summary.saleBreakdown.grosirOmzet)}`}
-              tone="purple"
+              tone={isAdmin ? "purple" : "plain"}
             />
           </div>
 
@@ -637,10 +641,14 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                       <th className="py-2 pr-4 font-bold">Periode</th>
                       <th className="py-2 pr-4 font-bold text-right">Qty (kg)</th>
                       <th className="py-2 pr-4 font-bold text-right">Omzet</th>
-                      <th className="py-2 pr-4 font-bold text-right">Modal</th>
-                      <th className="py-2 pr-4 font-bold text-right">Laba Kotor</th>
-                      <th className="py-2 pr-4 font-bold text-right">Ops</th>
-                      <th className="py-2 font-bold text-right">Laba Bersih</th>
+                      {isAdmin && (
+                        <>
+                          <th className="py-2 pr-4 font-bold text-right">Modal</th>
+                          <th className="py-2 pr-4 font-bold text-right">Laba Kotor</th>
+                          <th className="py-2 pr-4 font-bold text-right">Ops</th>
+                          <th className="py-2 font-bold text-right">Laba Bersih</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -649,16 +657,16 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                         <td className="py-2 pr-4 font-bold text-[#191712]">{row.label}</td>
                         <td className="py-2 pr-4 text-right font-mono">{shortNumber(row.totalQuantity)}</td>
                         <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalOmzet)}</td>
-                        <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalModal)}</td>
-                        <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalProfit)}</td>
-                        <td className="py-2 pr-4 text-right font-mono text-[#8f321a]">{rupiah(row.totalOperational)}</td>
-                        <td
-                          className={`py-2 text-right font-mono font-black ${
-                            row.netProfit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"
-                          }`}
-                        >
-                          {rupiah(row.netProfit)}
-                        </td>
+                        {isAdmin && (
+                          <>
+                            <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalModal)}</td>
+                            <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalProfit)}</td>
+                            <td className="py-2 pr-4 text-right font-mono text-[#8f321a]">{rupiah(row.totalOperational)}</td>
+                            <td className={`py-2 text-right font-mono font-black ${row.netProfit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"}`}>
+                              {rupiah(row.netProfit)}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -686,10 +694,14 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                       <th className="py-2 pr-4 font-bold">Periode Minggu</th>
                       <th className="py-2 pr-4 font-bold text-right">Qty (kg)</th>
                       <th className="py-2 pr-4 font-bold text-right">Omzet</th>
-                      <th className="py-2 pr-4 font-bold text-right">Modal</th>
-                      <th className="py-2 pr-4 font-bold text-right">Laba Kotor</th>
-                      <th className="py-2 pr-4 font-bold text-right">Ops</th>
-                      <th className="py-2 font-bold text-right">Laba Bersih</th>
+                      {isAdmin && (
+                        <>
+                          <th className="py-2 pr-4 font-bold text-right">Modal</th>
+                          <th className="py-2 pr-4 font-bold text-right">Laba Kotor</th>
+                          <th className="py-2 pr-4 font-bold text-right">Ops</th>
+                          <th className="py-2 font-bold text-right">Laba Bersih</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -698,16 +710,16 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                         <td className="py-2 pr-4 font-bold text-[#191712]">{row.label}</td>
                         <td className="py-2 pr-4 text-right font-mono">{shortNumber(row.totalQuantity)}</td>
                         <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalOmzet)}</td>
-                        <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalModal)}</td>
-                        <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalProfit)}</td>
-                        <td className="py-2 pr-4 text-right font-mono text-[#8f321a]">{rupiah(row.totalOperational)}</td>
-                        <td
-                          className={`py-2 text-right font-mono font-black ${
-                            row.netProfit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"
-                          }`}
-                        >
-                          {rupiah(row.netProfit)}
-                        </td>
+                        {isAdmin && (
+                          <>
+                            <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalModal)}</td>
+                            <td className="py-2 pr-4 text-right font-mono">{rupiah(row.totalProfit)}</td>
+                            <td className="py-2 pr-4 text-right font-mono text-[#8f321a]">{rupiah(row.totalOperational)}</td>
+                            <td className={`py-2 text-right font-mono font-black ${row.netProfit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"}`}>
+                              {rupiah(row.netProfit)}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -750,11 +762,13 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-black text-[#191712]">{rupiah(day.totalOmzet)}</p>
-                          <p className="text-[10px] text-[#706858] font-bold">
-                            Laba Kotor: <span className={day.totalProfit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"}>{rupiah(day.totalProfit)}</span>
-                            {" • "}Ops: <span className="text-[#8f321a]">{rupiah(day.totalOperational)}</span>
-                            {" • "}Laba Bersih: <span className={day.netProfit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"}>{rupiah(day.netProfit)}</span>
-                          </p>
+                          {isAdmin && (
+                            <p className="text-[10px] text-[#706858] font-bold">
+                              Laba Kotor: <span className={day.totalProfit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"}>{rupiah(day.totalProfit)}</span>
+                              {" • "}Ops: <span className="text-[#8f321a]">{rupiah(day.totalOperational)}</span>
+                              {" • "}Laba Bersih: <span className={day.netProfit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"}>{rupiah(day.netProfit)}</span>
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -803,11 +817,14 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                                 {shortNumber(item.quantity)} kg × {rupiah(item.sellPrice)} ={" "}
                               </span>
                               <span className="font-black text-[#191712]">{rupiah(item.omzet)}</span>
-                              <span className="text-[#706858]"> (modal {rupiah(item.modalCost)})</span>
-                              <span className={`font-black ${item.profit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"}`}>
-                                {" "}
-                                → {rupiah(item.profit)}
-                              </span>
+                              {isAdmin && (
+                                <>
+                                  <span className="text-[#706858]"> (modal {rupiah(item.modalCost)})</span>
+                                  <span className={`font-black ${item.profit >= 0 ? "text-[#1f8f5f]" : "text-[#8f321a]"}`}>
+                                    {" "}→ {rupiah(item.profit)}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -818,7 +835,6 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
             )}
           </div>
         </>
-      )}
 
       <div className="flex items-start gap-2 rounded-2xl border border-[#191712]/10 bg-white p-4 text-xs text-[#706858]">
         <Download size={15} className="mt-0.5 shrink-0" />
