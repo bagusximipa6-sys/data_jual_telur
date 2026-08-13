@@ -35,10 +35,12 @@ const SCHEMA_STATEMENTS: string[] = [
     buy_price_snapshot NUMERIC NOT NULL DEFAULT 0,
     sale_type TEXT DEFAULT 'eceran',
     payment_method TEXT DEFAULT 'cash',
+    created_by TEXT NOT NULL DEFAULT 'user',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
   `ALTER TABLE items ADD COLUMN IF NOT EXISTS buy_price NUMERIC NOT NULL DEFAULT 0`,
   `ALTER TABLE stock_out ADD COLUMN IF NOT EXISTS buy_price_snapshot NUMERIC NOT NULL DEFAULT 0`,
+  `ALTER TABLE stock_out ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT 'user'`,
   `CREATE TABLE IF NOT EXISTS price_history (
     id TEXT PRIMARY KEY,
     barang_id TEXT NOT NULL,

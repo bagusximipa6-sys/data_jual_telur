@@ -41,8 +41,11 @@ CREATE TABLE IF NOT EXISTS stock_out (
   buy_price_snapshot NUMERIC NOT NULL DEFAULT 0,
   sale_type TEXT DEFAULT 'eceran',
   payment_method TEXT DEFAULT 'cash',
+  created_by TEXT NOT NULL DEFAULT 'user',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE stock_out ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT 'user';
 
 -- Tabel: Riwayat Harga Barang (Price History)
 -- Setiap perubahan harga dicatat sebagai entri baru (bukan UPDATE harga lama).

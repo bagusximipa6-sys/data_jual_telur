@@ -42,6 +42,7 @@ type StockOutRow = {
   buyPriceSnapshot?: number;
   saleType: string;
   paymentMethod: string;
+  createdBy: string;
 };
 type PriceHistoryRow = {
   id: string;
@@ -77,7 +78,7 @@ export async function loadAllData(): Promise<AppDataSet> {
       db.sql`SELECT id, name, sell_price AS "sellPrice", buy_price AS "buyPrice" FROM items ORDER BY created_at ASC`,
       db.sql`SELECT id, name, address FROM bakul_masters ORDER BY created_at ASC`,
       db.sql`SELECT id, date, item_name AS "itemName", quantity, buy_price AS "buyPrice" FROM stock_in ORDER BY created_at ASC`,
-      db.sql`SELECT id, date, bakul_name AS "bakulName", item_name AS "itemName", quantity, price, buy_price_snapshot AS "buyPriceSnapshot", sale_type AS "saleType", payment_method AS "paymentMethod" FROM stock_out ORDER BY created_at ASC`,
+      db.sql`SELECT id, date, bakul_name AS "bakulName", item_name AS "itemName", quantity, price, buy_price_snapshot AS "buyPriceSnapshot", sale_type AS "saleType", payment_method AS "paymentMethod", created_by AS "createdBy" FROM stock_out ORDER BY created_at ASC`,
       db.sql`SELECT date, modal_qty AS "modalQty", modal_total AS "modalTotal", sale_qty AS "saleQty", sale_total AS "saleTotal", shrink, target, gross_profit AS "grossProfit", difference, operational, net_profit AS "netProfit", note FROM sales ORDER BY position ASC, created_at ASC`,
       db.sql`SELECT date, name, bill, paid, balance, note FROM bakul_records ORDER BY position ASC, created_at ASC`,
       db.sql`SELECT date, description, amount, note FROM ops_records ORDER BY position ASC, created_at ASC`,
@@ -120,6 +121,7 @@ const stockOut: StockOutRecord[] = (stockOutR.rows as unknown as StockOutRow[]).
       : r.paymentMethod === "hutang"
       ? "hutang"
       : "cash") as "cash" | "transfer" | "hutang",
+    createdBy: (r.createdBy === "admin" ? "admin" : "user") as "user" | "admin",
   }));
 
   const sales: DailySale[] = (salesR.rows as unknown as SaleRow[]).map((r) => ({
@@ -219,8 +221,8 @@ const client = await db.connect();
     // Stock out
     for (const r of stockOut) {
       await client.sql`
-        INSERT INTO stock_out (id, date, bakul_name, item_name, quantity, price, buy_price_snapshot, sale_type, payment_method)
-        VALUES (${r.id}, ${r.date}, ${r.bakulName}, ${r.itemName}, ${r.quantity}, ${r.price}, ${r.buyPriceSnapshot ?? 0}, ${r.saleType ?? "eceran"}, ${r.paymentMethod ?? "cash"})
+        INSERT INTO stock_out (id, date, bakul_name, item_name, quantity, price, buy_price_snapshot, sale_type, payment_method, created_by)
+        VALUES (${r.id}, ${r.date}, ${r.bakulName}, ${r.itemName}, ${r.quantity}, ${r.price}, ${r.buyPriceSnapshot ?? 0}, ${r.saleType ?? "eceran"}, ${r.paymentMethod ?? "cash"}, ${r.createdBy ?? "user"})
       `;
     }
     // Price history
