@@ -71,7 +71,8 @@ export async function GET() {
     const data = await loadAllData();
     return NextResponse.json({ ok: true, data });
   } catch (err) {
-    console.error("GET /api/data error:", err);
+    // Log error yang lebih detail di sisi server untuk debugging
+    console.error("GET /api/data - Database Load Error:", err);
     return NextResponse.json({ ok: false, error: "Gagal memuat data dari database." }, { status: 500 });
   }
 }
@@ -106,7 +107,8 @@ export async function POST(request: NextRequest) {
     await saveAllData(data);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("POST /api/data error:", err);
+    // Log error yang lebih detail di sisi server untuk debugging
+    console.error("POST /api/data - Database Save Error:", err);
     return NextResponse.json({ ok: false, error: "Gagal menyimpan data ke database." }, { status: 500 });
   }
 }
@@ -120,7 +122,8 @@ export async function DELETE(request: NextRequest) {
     await resetAllData();
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("DELETE /api/data error:", err);
+    // Log error yang lebih detail di sisi server untuk debugging
+    console.error("DELETE /api/data - Database Reset Error:", err);
     return NextResponse.json({ ok: false, error: "Gagal mereset data." }, { status: 500 });
   }
 }
