@@ -476,17 +476,6 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
           </p>
         </div>
 <div className="flex flex-wrap items-center gap-2">
-          <Input
-            type="date"
-            size="sm"
-            className="w-full sm:w-[180px]"
-            value={dateFilter}
-            onValueChange={setDateFilter}
-            aria-label="Filter Tanggal"
-            radius="sm"
-            isClearable
-            onClear={() => setDateFilter("")}
-          />
 <Button
             size="sm"
             className="bg-[#191712] font-bold text-white"
@@ -734,9 +723,18 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                   {dateFilter ? `Menampilkan tanggal ${dateFilter}` : "Seluruh tanggal penjualan"} • {filteredDaily.length} hari
                 </p>
               </div>
-              <Chip size="sm" className="bg-[#f0eadb] font-bold text-[#191712]">
-                {filteredDaily.length} Hari
-              </Chip>
+              <Input
+                type="date"
+                size="sm"
+                className="w-full sm:w-[180px]"
+                value={dateFilter}
+                onValueChange={setDateFilter}
+                aria-label="Filter Tanggal"
+                radius="sm"
+                isClearable
+                onClear={() => setDateFilter("")}
+                placeholder="Filter per tanggal"
+              />
             </div>
             <Divider className="bg-[#191712]/5" />
             {filteredDaily.length === 0 ? (

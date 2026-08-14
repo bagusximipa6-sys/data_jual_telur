@@ -92,12 +92,12 @@ export function MasterTab({
   const isAdmin = role === "admin";
 
   // === Form State: Master Barang ===
-const [itemForm, setItemForm] = useState({ name: "", sellPrice: "", buyPrice: "" });
+const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
   const [itemEditIndex, setItemEditIndex] = useState<number | null>(null);
   const [itemDeleteIndex, setItemDeleteIndex] = useState<number | null>(null);
 
   const resetItemForm = () => {
-    setItemForm({ name: "", sellPrice: "", buyPrice: "" });
+    setItemForm({ name: "", sellPrice: "" });
     setItemEditIndex(null);
   };
 
@@ -105,7 +105,7 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "", buyPrice: ""
     e.preventDefault();
     const name = itemForm.name.trim();
     const sellPrice = toNumber(itemForm.sellPrice);
-    const buyPrice = toNumber(itemForm.buyPrice);
+    const buyPrice = 0; // Harga beli tidak lagi di-set dari form ini
     if (!name || sellPrice <= 0) return;
 
     const record: ItemMaster = { id: uid(), name, sellPrice, buyPrice };
@@ -130,7 +130,6 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "", buyPrice: ""
     setItemForm({
       name: item.name,
       sellPrice: String(item.sellPrice),
-      buyPrice: item.buyPrice ? String(item.buyPrice) : "",
     });
   };
 
@@ -241,14 +240,6 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "", buyPrice: ""
                 onValueChange={(sellPrice) => setItemForm((prev) => ({ ...prev, sellPrice }))}
                 radius="sm"
                 required
-              />
-              <Input
-                label="Harga Beli /kg (Rp)"
-                labelPlacement="outside"
-                placeholder="cth. 21000"
-                value={itemForm.buyPrice}
-                onValueChange={(buyPrice) => setItemForm((prev) => ({ ...prev, buyPrice }))}
-                radius="sm"
               />
 
               <div className="flex gap-2">
