@@ -151,11 +151,11 @@ const dailyItemSummary = useMemo(() => {
     const stockInTotal = stockIn
       .filter((r) => r.date <= reportDate)
       .reduce((sum, r) => sum + r.quantity, 0);
-    const stockOutTotal = visibleStockOut
+    const stockOutTotal = stockOut
       .filter((r) => r.date <= reportDate)
       .reduce((sum, r) => sum + r.quantity, 0);
-    return stockInTotal - stockOutTotal;
-  }, [stockIn, visibleStockOut, reportDate]);
+    return Math.max(0, stockInTotal - stockOutTotal);
+  }, [stockIn, stockOut, reportDate]);
 
   // === Harga Telur Hari Ini ===
   // Sumber: Master Barang (sellPrice) + transaksi Barang Keluar pada tanggal terpilih
@@ -608,7 +608,8 @@ const active = effectiveMenu === key;
 
 {effectiveMenu === "stockout" && (
 <StockOutTab
-              stockOut={visibleStockOut}
+              stockOut={stockOut}
+              stockIn={stockIn}
               itemNames={itemNames}
               bakulNames={bakulNames}
               items={items}

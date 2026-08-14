@@ -16,12 +16,13 @@ import {
   Tooltip,
 } from "@heroui/react";
 import { AlertCircle, Edit2, Lock, Plus, Printer, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getActivePrice, rupiah, shortNumber, toNumber } from "@/lib/utils";
-import { BakulRecord, ItemMaster, PriceHistory, Role, StockOutRecord } from "@/types/finance";
+import { BakulRecord, ItemMaster, PriceHistory, Role, StockInRecord, StockOutRecord } from "@/types/finance";
 
 interface StockOutTabProps {
   stockOut: StockOutRecord[];
+  stockIn: StockInRecord[];
   itemNames: string[];
   bakulNames: string[];
   items: ItemMaster[];
@@ -43,6 +44,7 @@ const nextId = () => `SO-${++stockOutIdCounter}`;
 
 export function StockOutTab({
   stockOut,
+  stockIn,
   itemNames,
   bakulNames,
   items,
@@ -59,6 +61,7 @@ export function StockOutTab({
   const [search, setSearch] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
+  const [stockError, setStockError] = useState("");
 
   const [inputMode, setInputMode] = useState<"quantity" | "nominal">("quantity");
   const [nominalValue, setNominalValue] = useState("");
@@ -93,6 +96,25 @@ export function StockOutTab({
 
   const totalAuto = priceNum * quantityNum;
 
+  const availableStock = useMemo(() => {
+    const itemName = form.itemName.trim().toLowerCase();
+    if (!itemName || !form.date) return 0;
+
+    const stockInTotal = stockIn
+      .filter((r) => r.itemName.toLowerCase() === itemName && r.date <= form.date)
+      .reduce((sum, r) => sum + r.quantity, 0);
+    const editingId = editingIndex !== null ? stockOut[editingIndex]?.id : undefined;
+    const stockOutTotal = stockOut
+      .filter((r) => r.itemName.toLowerCase() === itemName && r.date <= form.date && r.id !== editingId)
+      .reduce((sum, r) => sum + r.quantity, 0);
+
+    return Math.max(0, stockInTotal - stockOutTotal);
+  }, [form.date, form.itemName, stockIn, stockOut, editingIndex]);
+
+  useEffect(() => {
+    setStockError((current) => (current ? "" : current));
+  }, [form.date, form.itemName, form.quantity, form.price, form.saleType, inputMode, nominalValue]);
+
 const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
     setEditingIndex(originalIndex);
     setForm({
@@ -106,6 +128,7 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
     });
     setInputMode("quantity");
     setNominalValue("");
+    setStockError("");
   };
 
   const handleCancelEdit = () => {
@@ -121,6 +144,7 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
     });
     setInputMode("quantity");
     setNominalValue("");
+    setStockError("");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -128,10 +152,17 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
     const bakulName = form.bakulName.trim();
     const itemName = form.itemName.trim();
     const quantity = quantityNum;
+    setStockError("");
     if (!bakulName || !itemName || !quantity) return;
     if (form.saleType === "grosir" && !priceNum) return;
 
     const isNew = editingIndex === null;
+    if (quantity > availableStock + 0.000001) {
+      setStockError(
+        `Stok ${itemName} tidak cukup. Sisa stok tersedia ${shortNumber(availableStock)} kg, sedangkan input ${shortNumber(quantity)} kg.`
+      );
+      return;
+    }
 
     // Snapshot Harga Transaksi (Price History): cari harga aktif pada tanggal transaksi.
     // effectiveAt <= tanggal transaksi, paling baru. If tidak ada di PriceHistory,
@@ -469,7 +500,17 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
               <span className="font-bold text-[#706858]">Total Penjualan</span>
               <span className="font-mono font-black text-[#1f8f5f]">{rupiah(totalAuto)}</span>
             </div>
+            <div className="flex justify-between text-xs">
+              <span className="font-bold text-[#706858]">Sisa Stok Tersedia</span>
+              <span className="font-mono font-black text-[#191712]">{shortNumber(availableStock)} kg</span>
+            </div>
           </div>
+
+          {stockError && (
+            <div className="rounded-xl border border-[#8f321a]/20 bg-[#ffe2d8] px-3 py-2 text-xs font-bold text-[#8f321a]">
+              {stockError}
+            </div>
+          )}
 
           <div className="flex gap-2 pt-2">
             <Button
