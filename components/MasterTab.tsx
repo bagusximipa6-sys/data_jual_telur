@@ -277,14 +277,10 @@ items.map((item, index) => {
                             <p className="text-[10px] text-[#706858] uppercase font-bold">Master Barang</p>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="grid grid-cols-1 gap-2 text-xs">
                           <div className="rounded-lg bg-[#f7f5ef] p-2">
                             <span className="text-[10px] text-[#706858] uppercase block">Harga Jual /kg</span>
                             <span className="font-bold text-[#1f8f5f]">{rupiah(item.sellPrice)}</span>
-                          </div>
-                          <div className="rounded-lg bg-[#f7f5ef] p-2">
-                            <span className="text-[10px] text-[#706858] uppercase block">Harga Beli /kg</span>
-                            <span className="font-bold text-[#8f321a]">{rupiah(item.buyPrice ?? 0)}</span>
                           </div>
                         </div>
                         <div className="flex gap-2 pt-1 border-t border-[#191712]/5">
@@ -355,8 +351,7 @@ items.map((item, index) => {
                             <span className="font-mono text-[10px] font-bold text-[#706858]">{p.effectiveAt}</span>
                           </div>
                           <div className="text-[#706858] font-medium mt-0.5">
-                            Beli <span className="text-[#8f321a] font-bold">{rupiah(p.hargaBeli)}</span>
-                            {" • "}Jual <span className="text-[#1f8f5f] font-bold">{rupiah(p.hargaJual)}</span>
+                            Harga Jual <span className="text-[#1f8f5f] font-bold">{rupiah(p.hargaJual)}</span>
                           </div>
                         </div>
                       );

@@ -16,8 +16,8 @@ import {
   Tooltip,
 } from "@heroui/react";
 import { AlertCircle, Edit2, Lock, Plus, Printer, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { getActivePrice, rupiah, shortNumber, toNumber } from "@/lib/utils";
+import { useMemo, useState } from "react";
+import { rupiah, shortNumber, toNumber } from "@/lib/utils";
 import { BakulRecord, ItemMaster, PriceHistory, Role, StockInRecord, StockOutRecord } from "@/types/finance";
 
 interface StockOutTabProps {
@@ -48,7 +48,6 @@ export function StockOutTab({
   itemNames,
   bakulNames,
   items,
-  priceHistory,
   isRecordLocked,
   onAddStockOut,
   onUpdateStockOut,
@@ -111,9 +110,25 @@ export function StockOutTab({
     return Math.max(0, stockInTotal - stockOutTotal);
   }, [form.date, form.itemName, stockIn, stockOut, editingIndex]);
 
-  useEffect(() => {
-    setStockError((current) => (current ? "" : current));
-  }, [form.date, form.itemName, form.quantity, form.price, form.saleType, inputMode, nominalValue]);
+  // Map item name -> buyPrice from latest Barang Masuk (stock in) record
+  // Ini akan menjadi sumber harga beli yang akurat saat membuat transaksi.
+  const buyPriceMap = useMemo(() => {
+    const map = new Map<string, number>();
+    [...stockIn].sort((a, b) => a.date.localeCompare(b.date)).forEach(r => map.set(r.itemName.toLowerCase(), r.buyPrice));
+    return map;
+  }, [stockIn]);
+
+  // Wrapper untuk setForm yang juga membersihkan error
+  const setFormAndClearError = (updater: React.SetStateAction<typeof form>) => {
+    setForm(updater);
+    if (stockError) setStockError("");
+  };
+
+  // Wrapper untuk setNominalValue yang juga membersihkan error
+  const setNominalValueAndClearError = (value: string) => {
+    setNominalValue(value);
+    if (stockError) setStockError("");
+  };
 
 const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
     setEditingIndex(originalIndex);
@@ -164,16 +179,11 @@ const handleStartEdit = (item: StockOutRecord, originalIndex: number) => {
       return;
     }
 
-    // Snapshot Harga Transaksi (Price History): cari harga aktif pada tanggal transaksi.
-    // effectiveAt <= tanggal transaksi, paling baru. If tidak ada di PriceHistory,
-    // gunakan harga master barang.
-    const masterItem = items.find(
-      (i) => i.name.toLowerCase() === itemName.toLowerCase()
-    );
-    const activePrice = masterItem
-      ? getActivePrice(priceHistory, masterItem.id, form.date)
-      : null;
-const hargaBeliSnapshot = activePrice ? activePrice.hargaBeli : (masterItem?.buyPrice ?? 0);
+    // Snapshot Harga Beli: Prioritas utama dari data Barang Masuk terakhir.
+    // Fallback ke harga beli di master barang (yang mungkin 0).
+    const masterItem = items.find((i) => i.name.toLowerCase() === itemName.toLowerCase());
+    const hargaBeliSnapshot =
+      buyPriceMap.get(itemName.toLowerCase()) ?? (masterItem?.buyPrice ?? 0);
 
     const record: StockOutRecord = {
       id: isNew ? nextId() : stockOut[editingIndex].id,
@@ -314,7 +324,7 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
             label="Tanggal Keluar"
             labelPlacement="outside"
             value={form.date}
-            onValueChange={(date) => setForm((prev) => ({ ...prev, date }))}
+            onValueChange={(date) => setFormAndClearError((prev) => ({ ...prev, date }))}
             radius="sm"
             required
           />
@@ -326,7 +336,7 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
               selectedKeys={form.bakulName ? [form.bakulName] : []}
               onSelectionChange={(keys) => {
                 const selected = String(Array.from(keys)[0] ?? form.bakulName);
-                setForm((prev) => ({ ...prev, bakulName: selected }));
+                setFormAndClearError((prev) => ({ ...prev, bakulName: selected }));
               }}
               radius="sm"
               isDisabled={bakulNames.length === 0}
@@ -349,7 +359,7 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
               selectedKeys={form.itemName ? [form.itemName] : []}
               onSelectionChange={(keys) => {
                 const selected = String(Array.from(keys)[0] ?? form.itemName);
-                setForm((prev) => ({ ...prev, itemName: selected }));
+                setFormAndClearError((prev) => ({ ...prev, itemName: selected }));
               }}
               radius="sm"
               isDisabled={itemNames.length === 0}
@@ -372,7 +382,10 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
               size="sm"
               radius="sm"
               selectedKey={inputMode}
-              onSelectionChange={(key) => setInputMode(key as "quantity" | "nominal")}
+              onSelectionChange={(key) => {
+                setInputMode(key as "quantity" | "nominal");
+                if (stockError) setStockError("");
+              }}
               classNames={{
                 tabList: "w-full sm:w-auto bg-[#f0eadb] shadow-inner p-1",
                 cursor: "bg-[#191712] shadow-sm",
@@ -391,7 +404,7 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
                 labelPlacement="outside"
                 placeholder="cth. 1.5"
                 value={form.quantity}
-                onValueChange={(quantity) => setForm((prev) => ({ ...prev, quantity }))}
+                onValueChange={(quantity) => setFormAndClearError((prev) => ({ ...prev, quantity }))}
                 radius="sm"
                 required
                 endContent={<span className="text-xs font-bold text-[#706858]">kg</span>}
@@ -404,7 +417,7 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
                 labelPlacement="outside"
                 placeholder="cth. 20000"
                 value={nominalValue}
-                onValueChange={setNominalValue}
+                onValueChange={setNominalValueAndClearError}
                 radius="sm"
                 required
                 startContent={<span className="text-xs font-bold text-[#706858]">Rp</span>}
@@ -417,9 +430,9 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
             <Tabs
               aria-label="Jenis Penjualan"
               selectedKey={form.saleType}
-              onSelectionChange={(key) =>
-                setForm((prev) => ({ ...prev, saleType: String(key) as "eceran" | "grosir", price: "" }))
-              }
+              onSelectionChange={(key) => {
+                setFormAndClearError((prev) => ({ ...prev, saleType: String(key) as "eceran" | "grosir", price: "" }));
+              }}
               radius="sm"
               variant="bordered"
               classNames={{
@@ -437,9 +450,9 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
             <Tabs
               aria-label="Metode Pembayaran"
               selectedKey={form.paymentMethod}
-              onSelectionChange={(key) =>
-                setForm((prev) => ({ ...prev, paymentMethod: String(key) as "cash" | "transfer" | "hutang" }))
-              }
+              onSelectionChange={(key) => {
+                setFormAndClearError((prev) => ({ ...prev, paymentMethod: String(key) as "cash" | "transfer" | "hutang" }));
+              }}
               radius="sm"
               variant="bordered"
               classNames={{
@@ -465,7 +478,7 @@ const saleTypeLabel = (type?: "eceran" | "grosir") => type ?? "eceran";
                 labelPlacement="outside"
                 placeholder="cth. 27000"
                 value={form.price}
-                onValueChange={(price) => setForm((prev) => ({ ...prev, price }))}
+                onValueChange={(price) => setFormAndClearError((prev) => ({ ...prev, price }))}
                 radius="sm"
                 required
                 startContent={<span className="text-xs font-bold text-[#706858]">Rp</span>}

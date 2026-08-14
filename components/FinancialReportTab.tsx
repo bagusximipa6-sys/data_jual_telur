@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Chip, Divider, Input, Tab, Tabs } from "@heroui/react";
+import { Button, Divider, Input, Tab, Tabs } from "@heroui/react";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
@@ -120,11 +120,11 @@ const buildProfitLoss = (
   const sorted = [...stockOut].sort((a, b) => a.date.localeCompare(b.date));
 
   for (const record of sorted) {
-    // Prioritas utama: harga beli dari Barang Masuk terakhir.
-    // Fallback: snapshot harga beli saat transaksi (dari Price History).
+    // Prioritas utama: snapshot harga beli saat transaksi (buyPriceSnapshot).
+    // Ini "mengunci" harga modal pada saat penjualan terjadi.
+    // Fallback ke harga beli dari Barang Masuk terakhir jika snapshot tidak ada (untuk data lama).
     const buyPrice =
-      buyPriceMap.get(record.itemName.toLowerCase()) ??
-      record.buyPriceSnapshot ??
+      record.buyPriceSnapshot ?? buyPriceMap.get(record.itemName.toLowerCase()) ??
       0; // Default ke 0 jika tidak ditemukan sama sekali
     const omzet = record.quantity * record.price;
     const modalCost = record.quantity * buyPrice;
