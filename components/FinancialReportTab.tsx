@@ -778,6 +778,19 @@ export function FinancialReportTab({ stockOut, stockIn, ops, role }: FinancialRe
                         </span>
                       </div>
 
+                      {/* Daily Payment Method breakdown */}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
+                        <span className="rounded-full bg-[#d9f99d] px-2 py-0.5 text-[#3f6212] uppercase tracking-wide">
+                          Cash: {shortNumber(day.paymentBreakdown.cashQty)} kg • {rupiah(day.paymentBreakdown.cashOmzet)}
+                        </span>
+                        <span className="rounded-full bg-[#e0f2fe] px-2 py-0.5 text-[#0c4a6e] uppercase tracking-wide">
+                          TF: {shortNumber(day.paymentBreakdown.transferQty)} kg • {rupiah(day.paymentBreakdown.transferOmzet)}
+                        </span>
+                        <span className="rounded-full bg-[#ffe4e6] px-2 py-0.5 text-[#9f1239] uppercase tracking-wide">
+                          Hutang: {shortNumber(day.paymentBreakdown.hutangQty)} kg • {rupiah(day.paymentBreakdown.hutangOmzet)}
+                        </span>
+                      </div>
+
                       <div className="mt-3 space-y-1">
                         {day.items.map((item, idx) => (
                           <div
