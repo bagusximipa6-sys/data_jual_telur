@@ -3,6 +3,7 @@
 import { Input } from "@heroui/react";
 import { motion } from "framer-motion";
 import {
+  AlertTriangle,
   Boxes,
   CircleDollarSign,
   ClipboardList,
@@ -77,6 +78,7 @@ const { state, dispatch, isClient, loading, loadError, lockError, syncStatus, re
         title: "Data & Pengaturan",
         items: [
           { key: "bakul", label: "Piutang Bakul", icon: Users, adminOnly: false },
+          { key: "bakul-overdue", label: "Piutang Overdue", icon: AlertTriangle, adminOnly: false },
           { key: "master", label: "Master & Data", icon: Database, adminOnly: false },
         ],
       },
@@ -113,6 +115,27 @@ const { state, dispatch, isClient, loading, loadError, lockError, syncStatus, re
     if (selectedMonth === "all") return bakulRecords;
     return bakulRecords.filter((b) => b.date.startsWith(selectedMonth));
   }, [bakulRecords, selectedMonth]);
+
+  // Filtered data for overdue bakul records (more than 3 days and not fully paid)
+  const filteredOverdueBakul = useMemo(() => {
+    // Menggunakan UTC untuk perbandingan tanggal yang konsisten dan menghindari masalah timezone.
+    // new Date() akan mengambil waktu saat ini, lalu kita ekstrak komponen UTC-nya.
+    const now = new Date();
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    return bakulRecords.filter((b) => {
+      if (b.balance <= 0) return false; // Already paid
+
+      // Membuat tanggal transaksi sebagai UTC. Misal '2023-10-26' menjadi 26 Oktober 2023 00:00:00 UTC.
+      const recordDateParts = b.date.split('-').map(Number);
+      const recordDateUTC = new Date(Date.UTC(recordDateParts[0], recordDateParts[1] - 1, recordDateParts[2]));
+
+      const dueDate = new Date(recordDateUTC.getTime());
+      dueDate.setUTCDate(dueDate.getUTCDate() + 3); // Jatuh tempo adalah 3 hari setelah tanggal transaksi.
+
+      return todayUTC > dueDate; // Tampilkan jika hari ini (UTC) sudah melewati tanggal jatuh tempo.
+    });
+  }, [bakulRecords]);
 
   // Filter stockOut records based on role. Admin sees all, user sees their own.
   const visibleStockOut = useMemo(() => {
@@ -560,6 +583,17 @@ const active = effectiveMenu === key;
             />
           )}
 
+{effectiveMenu === "bakul-overdue" && (
+<BakulTab
+              bakulRecords={filteredOverdueBakul}
+              bakulNames={bakulNames}
+              role={role}
+              isRecordLocked={() => false}
+              onAddBakul={handleAddBakul}
+              onUpdateBakul={handleUpdateBakul}
+              onDeleteBakul={handleDeleteBakul}
+            />
+          )}
 {effectiveMenu === "ops" && (
 <OpsTab
               ops={ops}
