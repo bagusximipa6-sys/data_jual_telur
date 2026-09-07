@@ -74,6 +74,7 @@ export function useAppData() {
   const stockOutBaseline = useRef<StockOutRecord[] | undefined>(undefined);
   const stockInBaseline = useRef<StockInRecord[] | undefined>(undefined);
   const datasetBaseline = useRef<LocalDataset | undefined>(undefined);
+  const restorePending = useRef(false);
 
   // Membangun dataset gabungan untuk dikirim ke server / dipakai aplikasi.
   const state: AppDataSet = useMemo(
@@ -171,11 +172,18 @@ export function useAppData() {
 
     const timer = setTimeout(async () => {
       setSyncStatus("saving");
-      const success = await pushAllToServer(dataset, stockOutBaseline.current, stockInBaseline.current, datasetBaseline.current);
+      const success = await pushAllToServer(
+        dataset,
+        stockOutBaseline.current,
+        stockInBaseline.current,
+        datasetBaseline.current,
+        restorePending.current ? { restore: true } : undefined
+      );
       if (success.ok) {
         stockInBaseline.current = [...stockIn];
         stockOutBaseline.current = [...stockOut];
         datasetBaseline.current = dataset;
+        restorePending.current = false;
       }
       if (!success.ok) setLoadError(success.error);
       setSyncStatus(success.ok ? "saved" : "error");
@@ -424,6 +432,10 @@ export function useAppData() {
     }
   }, []);
 
+  const markRestorePending = useCallback(() => {
+    restorePending.current = true;
+  }, []);
+
   // Helper: apakah sebuah tanggal sudah terkunci (tanggal lampau).
   const isRecordLocked = useCallback(
     (date: string | undefined): boolean => !!date && isLockedDate(date),
@@ -443,5 +455,6 @@ export function useAppData() {
     isRecordLocked,
     reload,
     handleResetData,
+    markRestorePending,
   };
 }

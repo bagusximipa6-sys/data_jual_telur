@@ -40,6 +40,7 @@ export type SyncStatus =
   | "offline"; // tidak terhubung ke server
 
 export type SyncResult = { ok: true } | { ok: false; error: string };
+export type SyncOptions = { restore?: boolean };
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -85,7 +86,8 @@ export async function pushAllToServer(
   data: LocalDataset,
   stockOutBaseline?: StockOutRecord[],
   stockInBaseline?: StockInRecord[],
-  datasetBaseline?: LocalDataset
+  datasetBaseline?: LocalDataset,
+  options?: SyncOptions
 ): Promise<SyncResult> {
   try {
     let requestData: LocalDataset | (Omit<LocalDataset, "stockOut" | "stockIn"> & {
@@ -118,7 +120,10 @@ export async function pushAllToServer(
     }
 
     if (datasetBaseline) {
-      const partialData: Record<string, unknown> = { partial: true };
+      const partialData: Record<string, unknown> = {
+        partial: true,
+        ...(options?.restore ? { restore: true } : {}),
+      };
       const fields: (keyof LocalDataset)[] = [
         "sales", "bakulRecords", "ops", "items", "bakulMasters", "priceHistory", "opsCategories",
       ];

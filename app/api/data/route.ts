@@ -166,6 +166,7 @@ export async function POST(request: NextRequest) {
       : new TextDecoder().decode(bodyBytes);
     const body = JSON.parse(bodyText) as Partial<AppDataSet> & {
       partial?: boolean;
+      restore?: boolean;
       stockOutDelta?: StockOutDelta;
       stockInDelta?: StockInDelta;
     };
@@ -199,7 +200,9 @@ export async function POST(request: NextRequest) {
 
     // Defense-in-depth: tolak simpan jika ada data harian pada tanggal lampau
     // yang akan diubah/dihapus (daily lock).
-    const violation = await findLockedViolation(data);
+    const violation = body.restore && isAdminRequest(request)
+      ? null
+      : await findLockedViolation(data);
     if (violation) {
       return NextResponse.json({ ok: false, error: violation }, { status: 403 });
     }

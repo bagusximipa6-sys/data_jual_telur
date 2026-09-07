@@ -89,6 +89,7 @@ export function MasterTab({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [importError, setImportError] = useState("");
+  const [removeOpsOnImport, setRemoveOpsOnImport] = useState(true);
   const isAdmin = role === "admin";
 
   // === Form State: Master Barang ===
@@ -179,7 +180,7 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
           onImportData({
             sales: json.sales,
             bakulRecords: json.bakulRecords,
-            ops: json.ops,
+            ops: removeOpsOnImport ? [] : json.ops,
             items: Array.isArray(json.items) ? json.items : [],
             bakulMasters: Array.isArray(json.bakulMasters) ? json.bakulMasters : [],
             stockIn: Array.isArray(json.stockIn) ? json.stockIn : [],
@@ -188,7 +189,9 @@ const [itemForm, setItemForm] = useState({ name: "", sellPrice: "" });
             opsCategories: Array.isArray(json.opsCategories) ? json.opsCategories : [],
           });
           setImportError("");
-          alert("Data berhasil di-import!");
+          alert(removeOpsOnImport
+            ? "Data berhasil di-import tanpa data operasional."
+            : "Data berhasil di-import!");
         } else {
           setImportError("Format file JSON tidak sesuai dengan skema Buku Keuangan.");
         }
@@ -574,6 +577,14 @@ items.map((item, index) => {
 
           {isAdmin && (
             <>
+              <label className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+                <input
+                  type="checkbox"
+                  checked={removeOpsOnImport}
+                  onChange={(event) => setRemoveOpsOnImport(event.target.checked)}
+                />
+                Hapus data operasional saat import
+              </label>
               <input
                 type="file"
                 ref={fileInputRef}

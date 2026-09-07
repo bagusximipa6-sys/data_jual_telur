@@ -41,7 +41,7 @@ import {
 } from "@/types/finance";
 
 export default function Home() {
-const { state, dispatch, isClient, loading, loadError, lockError, syncStatus, reload, handleResetData, priceHistory, isRecordLocked } =
+const { state, dispatch, isClient, loading, loadError, lockError, syncStatus, reload, handleResetData, markRestorePending, priceHistory, isRecordLocked } =
     useAppData();
   const { sales, bakulRecords, ops, items, bakulMasters, stockIn, stockOut, opsCategories } = state;
   const { role, adminUnlocked, handleUnlockAdmin, handleLogoutAdmin, handleRoleChange } = useAuth();
@@ -312,6 +312,7 @@ const bakulNames = useMemo(() => unique(bakulMasters.map((item) => item.name)), 
 // JSON Import & Reset
   const handleImportData = (data: Partial<AppDataSet>) => {
     const fullData = { ...state, ...data };
+    markRestorePending();
     dispatch({ type: "SET_ALL_DATA", payload: fullData });
   };
 
