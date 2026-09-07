@@ -41,7 +41,7 @@ export type SyncStatus =
 
 export type SyncResult = { ok: true } | { ok: false; error: string };
 
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
@@ -174,7 +174,7 @@ export async function pushAllToServer(
     return {
       ok: false,
       error: error instanceof DOMException && error.name === "AbortError"
-        ? "Server tidak merespons dalam 15 detik."
+        ? "Server tidak merespons dalam 30 detik."
         : "Tidak dapat terhubung ke server.",
     };
   }

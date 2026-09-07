@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import {
   loadAllData,
   resetAllData,
@@ -11,6 +11,16 @@ import {
 import { isAdminRequest, unauthorizedResponse } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+function compressedJson(payload: unknown): NextResponse {
+  return new NextResponse(gzipSync(JSON.stringify(payload)), {
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Encoding": "gzip",
+      "Cache-Control": "no-store",
+    },
+  });
+}
 
 // Tanggal hari ini dalam format ISO (YYYY-MM-DD) menggunakan zona waktu 'Asia/Jakarta'.
 // Ini memastikan konsistensi antara server Vercel (UTC) dan localhost (WIB).
@@ -138,7 +148,7 @@ function mergeDelta<T extends { id: string }>(
 export async function GET() {
   try {
     const data = await loadAllData();
-    return NextResponse.json({ ok: true, data });
+    return compressedJson({ ok: true, data });
   } catch (err) {
     // Log error yang lebih detail di sisi server untuk debugging
     console.error("GET /api/data - Database Load Error:", err);
