@@ -71,11 +71,18 @@ const EMPTY: LocalDataset = {
 export async function fetchAllFromServer(): Promise<Partial<LocalDataset> | null> {
   try {
     const res = await fetchWithTimeout("/api/data", { cache: "no-store" });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error("GET /api/data failed:", res.status);
+      return null;
+    }
     const json = (await res.json()) as { ok?: boolean; data?: Partial<LocalDataset> };
-    if (!json.ok || !json.data) return null;
+    if (!json.ok || !json.data) {
+      console.error("GET /api/data returned invalid payload");
+      return null;
+    }
     return json.data;
-  } catch {
+  } catch (error) {
+    console.error("GET /api/data request failed:", error);
     return null;
   }
 }
