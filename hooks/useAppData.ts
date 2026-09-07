@@ -71,6 +71,8 @@ export function useAppData() {
 
   // Guard agar inisialisasi tidak berjalan dua kali.
   const initStarted = useRef(false);
+  const stockOutBaseline = useRef<StockOutRecord[] | undefined>(undefined);
+  const stockInBaseline = useRef<StockInRecord[] | undefined>(undefined);
 
   // Membangun dataset gabungan untuk dikirim ke server / dipakai aplikasi.
   const state: AppDataSet = useMemo(
@@ -108,6 +110,8 @@ export function useAppData() {
         setBakulMasters(serverData.bakulMasters ?? []);
         setStockIn(serverData.stockIn ?? []);
         setStockOut(serverData.stockOut ?? []);
+        stockInBaseline.current = serverData.stockIn ?? [];
+        stockOutBaseline.current = serverData.stockOut ?? [];
         setPriceHistory(serverData.priceHistory ?? []);
         setOpsCategories(serverData.opsCategories ?? []);
         setSyncStatus("saved");
@@ -126,6 +130,10 @@ export function useAppData() {
         };
         setSyncStatus("saving");
         const success = await pushAllToServer(demoData);
+        if (success) {
+          stockInBaseline.current = demoData.stockIn;
+          stockOutBaseline.current = demoData.stockOut;
+        }
         setSyncStatus(success ? "saved" : "error");
       }
       setDataLoaded(true);
@@ -155,7 +163,11 @@ export function useAppData() {
 
     const timer = setTimeout(async () => {
       setSyncStatus("saving");
-      const success = await pushAllToServer(dataset);
+      const success = await pushAllToServer(dataset, stockOutBaseline.current, stockInBaseline.current);
+      if (success) {
+        stockInBaseline.current = [...stockIn];
+        stockOutBaseline.current = [...stockOut];
+      }
       setSyncStatus(success ? "saved" : "error");
     }, 800);
 
@@ -335,6 +347,8 @@ export function useAppData() {
         setBakulMasters(serverData.bakulMasters ?? []);
         setStockIn(serverData.stockIn ?? []);
         setStockOut(serverData.stockOut ?? []);
+        stockInBaseline.current = serverData.stockIn ?? [];
+        stockOutBaseline.current = serverData.stockOut ?? [];
         setPriceHistory(serverData.priceHistory ?? []);
         setOpsCategories(serverData.opsCategories ?? []);
         setSyncStatus("saved");
@@ -377,6 +391,10 @@ export function useAppData() {
         priceHistory: initialPriceHistory as PriceHistory[],
         opsCategories: initialOpsCategories as string[],
       });
+      if (success) {
+        stockInBaseline.current = initialStockIn as StockInRecord[];
+        stockOutBaseline.current = initialStockOut as StockOutRecord[];
+      }
       setSyncStatus(success ? "saved" : resetOk ? "saved" : "error");
     } catch {
       setSyncStatus("error");

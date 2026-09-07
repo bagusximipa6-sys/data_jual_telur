@@ -9,6 +9,16 @@ import type {
   StockOutRecord,
 } from "@/types/finance";
 
+export type StockOutDelta = {
+  upsert: StockOutRecord[];
+  deletedIds: string[];
+};
+
+export type StockInDelta = {
+  upsert: StockInRecord[];
+  deletedIds: string[];
+};
+
 // Tipe dataset yang dikirim ke / disinkronkan dari server.
 export type LocalDataset = {
   sales: DailySale[];
@@ -57,16 +67,73 @@ export async function fetchAllFromServer(): Promise<Partial<LocalDataset> | null
 
 // Menyimpan seluruh data ke server POST /api/data.
 // Mengembalikan true jika berhasil.
-export async function pushAllToServer(data: LocalDataset): Promise<boolean> {
+export async function pushAllToServer(
+  data: LocalDataset,
+  stockOutBaseline?: StockOutRecord[],
+  stockInBaseline?: StockInRecord[]
+): Promise<boolean> {
   try {
+    let requestData: LocalDataset | (Omit<LocalDataset, "stockOut" | "stockIn"> & {
+      stockOut?: StockOutRecord[];
+      stockIn?: StockInRecord[];
+      stockOutDelta?: StockOutDelta;
+      stockInDelta?: StockInDelta;
+    }) = data;
+    let stockOutDelta: StockOutDelta | undefined;
+    let stockInDelta: StockInDelta | undefined;
+
+    if (stockOutBaseline) {
+      const baselineById = new Map(stockOutBaseline.map((record) => [record.id, record]));
+      const currentById = new Map(data.stockOut.map((record) => [record.id, record]));
+      const upsert = data.stockOut.filter((record) => JSON.stringify(record) !== JSON.stringify(baselineById.get(record.id)));
+      const deletedIds = stockOutBaseline
+        .filter((record) => !currentById.has(record.id))
+        .map((record) => record.id);
+      stockOutDelta = { upsert, deletedIds };
+    }
+
+    if (stockInBaseline) {
+      const baselineById = new Map(stockInBaseline.map((record) => [record.id, record]));
+      const currentById = new Map(data.stockIn.map((record) => [record.id, record]));
+      const upsert = data.stockIn.filter((record) => JSON.stringify(record) !== JSON.stringify(baselineById.get(record.id)));
+      const deletedIds = stockInBaseline
+        .filter((record) => !currentById.has(record.id))
+        .map((record) => record.id);
+      stockInDelta = { upsert, deletedIds };
+    }
+
+    if (stockOutDelta || stockInDelta) {
+      const { stockOut: fullStockOut, stockIn: fullStockIn, ...withoutDeltaRecords } = data;
+      requestData = {
+        ...withoutDeltaRecords,
+        ...(stockOutDelta ? {} : { stockOut: fullStockOut }),
+        ...(stockInDelta ? {} : { stockIn: fullStockIn }),
+        ...(stockOutDelta ? { stockOutDelta } : {}),
+        ...(stockInDelta ? { stockInDelta } : {}),
+      };
+    }
+
+    const payload = JSON.stringify(requestData);
+    let body: BodyInit = payload;
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+
+    // Kurangi ukuran request tanpa mengubah bentuk payload yang dipahami server.
+    if (typeof CompressionStream !== "undefined") {
+      const compressed = new Response(
+        new Blob([payload]).stream().pipeThrough(new CompressionStream("gzip"))
+      );
+      body = await compressed.blob();
+      headers["Content-Encoding"] = "gzip";
+    }
+
     const res = await fetch("/api/data", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      headers,
+      body,
     });
     if (!res.ok) return false;
-    const json = (await res.json()) as { ok?: boolean };
-    return json.ok === true;
+    const response = (await res.json()) as { ok?: boolean };
+    return response.ok === true;
   } catch {
     return false;
   }

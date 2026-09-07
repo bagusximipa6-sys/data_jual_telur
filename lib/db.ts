@@ -24,6 +24,16 @@ export type AppDataSet = {
   opsCategories: string[];
 };
 
+export type StockOutDelta = {
+  upsert: StockOutRecord[];
+  deletedIds: string[];
+};
+
+export type StockInDelta = {
+  upsert: StockInRecord[];
+  deletedIds: string[];
+};
+
 // Helper konversi NUMERIC -> number
 const num = (v: unknown): number =>
   typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) || 0 : 0;
@@ -107,7 +117,7 @@ export async function loadAllData(): Promise<AppDataSet> {
     buyPrice: num(r.buyPrice),
   }));
 
-const stockOut: StockOutRecord[] = (stockOutR.rows as unknown as StockOutRow[]).map((r) => ({
+  const stockOut: StockOutRecord[] = (stockOutR.rows as unknown as StockOutRow[]).map((r) => ({
     id: r.id,
     date: r.date,
     bakulName: r.bakulName,
@@ -172,7 +182,10 @@ const stockOut: StockOutRecord[] = (stockOutR.rows as unknown as StockOutRow[]).
 }
 
 // === Simpan seluruh data (transaksi atomik) ===
-export async function saveAllData(data: AppDataSet): Promise<void> {
+export async function saveAllData(
+  data: AppDataSet,
+  options?: { stockOutDelta?: StockOutDelta; stockInDelta?: StockInDelta }
+): Promise<void> {
   const {
     sales,
     bakulRecords,
@@ -185,17 +198,21 @@ export async function saveAllData(data: AppDataSet): Promise<void> {
     opsCategories,
   } = data;
 
-// Pastikan tabel sudah ada sebelum menulis.
+  // Pastikan tabel sudah ada sebelum menulis.
   await ensureSchema();
-const client = await db.connect();
+  const client = await db.connect();
   try {
     await client.sql`BEGIN`;
     await client.sql`DELETE FROM ops_records`;
     await client.sql`DELETE FROM bakul_records`;
     await client.sql`DELETE FROM sales`;
     await client.sql`DELETE FROM price_history`;
-    await client.sql`DELETE FROM stock_out`;
-    await client.sql`DELETE FROM stock_in`;
+    if (!options?.stockOutDelta) {
+      await client.sql`DELETE FROM stock_out`;
+    }
+    if (!options?.stockInDelta) {
+      await client.sql`DELETE FROM stock_in`;
+    }
     await client.sql`DELETE FROM bakul_masters`;
     await client.sql`DELETE FROM items`;
 
@@ -211,20 +228,68 @@ const client = await db.connect();
         INSERT INTO bakul_masters (id, name, address) VALUES (${m.id}, ${m.name}, ${m.address ?? ""})
       `;
     }
-    // Stock in
-    for (const r of stockIn) {
-      await client.sql`
-        INSERT INTO stock_in (id, date, item_name, quantity, buy_price)
-        VALUES (${r.id}, ${r.date}, ${r.itemName}, ${r.quantity}, ${r.buyPrice})
-      `;
+
+    // Stock in: delta requests only touch changed/deleted IDs.
+    const stockInDelta = options?.stockInDelta;
+    if (stockInDelta) {
+      if (stockInDelta.deletedIds.length > 0) {
+        for (const id of stockInDelta.deletedIds) {
+          await client.sql`DELETE FROM stock_in WHERE id = ${id}`;
+        }
+      }
+      for (const r of stockInDelta.upsert) {
+        await client.sql`
+          INSERT INTO stock_in (id, date, item_name, quantity, buy_price)
+          VALUES (${r.id}, ${r.date}, ${r.itemName}, ${r.quantity}, ${r.buyPrice})
+          ON CONFLICT (id) DO UPDATE SET
+            date = EXCLUDED.date,
+            item_name = EXCLUDED.item_name,
+            quantity = EXCLUDED.quantity,
+            buy_price = EXCLUDED.buy_price
+        `;
+      }
+    } else {
+      for (const r of stockIn) {
+        await client.sql`
+          INSERT INTO stock_in (id, date, item_name, quantity, buy_price)
+          VALUES (${r.id}, ${r.date}, ${r.itemName}, ${r.quantity}, ${r.buyPrice})
+        `;
+      }
     }
-    // Stock out
-    for (const r of stockOut) {
-      await client.sql`
-        INSERT INTO stock_out (id, date, bakul_name, item_name, quantity, price, buy_price_snapshot, sale_type, payment_method, created_by)
-        VALUES (${r.id}, ${r.date}, ${r.bakulName}, ${r.itemName}, ${r.quantity}, ${r.price}, ${r.buyPriceSnapshot ?? 0}, ${r.saleType ?? "eceran"}, ${r.paymentMethod ?? "cash"}, ${r.createdBy ?? "user"})
-      `;
+
+    // Stock out: delta requests only touch changed/deleted IDs.
+    const stockOutDelta = options?.stockOutDelta;
+    if (stockOutDelta) {
+      if (stockOutDelta.deletedIds.length > 0) {
+        for (const id of stockOutDelta.deletedIds) {
+          await client.sql`DELETE FROM stock_out WHERE id = ${id}`;
+        }
+      }
+      for (const r of stockOutDelta.upsert) {
+        await client.sql`
+          INSERT INTO stock_out (id, date, bakul_name, item_name, quantity, price, buy_price_snapshot, sale_type, payment_method, created_by)
+          VALUES (${r.id}, ${r.date}, ${r.bakulName}, ${r.itemName}, ${r.quantity}, ${r.price}, ${r.buyPriceSnapshot ?? 0}, ${r.saleType ?? "eceran"}, ${r.paymentMethod ?? "cash"}, ${r.createdBy ?? "user"})
+          ON CONFLICT (id) DO UPDATE SET
+            date = EXCLUDED.date,
+            bakul_name = EXCLUDED.bakul_name,
+            item_name = EXCLUDED.item_name,
+            quantity = EXCLUDED.quantity,
+            price = EXCLUDED.price,
+            buy_price_snapshot = EXCLUDED.buy_price_snapshot,
+            sale_type = EXCLUDED.sale_type,
+            payment_method = EXCLUDED.payment_method,
+            created_by = EXCLUDED.created_by
+        `;
+      }
+    } else {
+      for (const r of stockOut) {
+        await client.sql`
+          INSERT INTO stock_out (id, date, bakul_name, item_name, quantity, price, buy_price_snapshot, sale_type, payment_method, created_by)
+          VALUES (${r.id}, ${r.date}, ${r.bakulName}, ${r.itemName}, ${r.quantity}, ${r.price}, ${r.buyPriceSnapshot ?? 0}, ${r.saleType ?? "eceran"}, ${r.paymentMethod ?? "cash"}, ${r.createdBy ?? "user"})
+        `;
+      }
     }
+
     // Price history
     for (const p of priceHistory) {
       await client.sql`

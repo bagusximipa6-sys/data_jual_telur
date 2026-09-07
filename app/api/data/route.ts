@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadAllData, resetAllData, saveAllData, type AppDataSet } from "@/lib/db";
+import { gunzipSync } from "node:zlib";
+import {
+  loadAllData,
+  resetAllData,
+  saveAllData,
+  type AppDataSet,
+  type StockOutDelta,
+  type StockInDelta,
+} from "@/lib/db";
 import { isAdminRequest, unauthorizedResponse } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +120,20 @@ async function findLockedViolation(data: AppDataSet): Promise<string | null> {
   );
 }
 
+// Menggabungkan delta (upsert + deletedIds) dengan data existing di DB,
+// menghasilkan array penuh yang dipakai untuk validasi daily lock.
+// Pola yang sama dipakai untuk stockOut maupun stockIn.
+function mergeDelta<T extends { id: string }>(
+  existingRecords: T[],
+  delta: { upsert: T[]; deletedIds: string[] } | undefined
+): T[] {
+  if (!delta) return existingRecords;
+  return existingRecords
+    .filter((record) => !delta.deletedIds.includes(record.id))
+    .map((record) => delta.upsert.find((changed) => changed.id === record.id) ?? record)
+    .concat(delta.upsert.filter((changed) => !existingRecords.some((record) => record.id === changed.id)));
+}
+
 // GET /api/data -> ambil seluruh data
 export async function GET() {
   try {
@@ -127,10 +149,30 @@ export async function GET() {
 // POST /api/data -> simpan seluruh data (semua perangkat bisa menyimpan, seperti ayam)
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as Partial<AppDataSet>;
+    const contentEncoding = request.headers.get("content-encoding");
+    const bodyBytes = await request.arrayBuffer();
+    const bodyText = contentEncoding?.toLowerCase() === "gzip"
+      ? gunzipSync(Buffer.from(bodyBytes)).toString("utf8")
+      : new TextDecoder().decode(bodyBytes);
+    const body = JSON.parse(bodyText) as Partial<AppDataSet> & {
+      stockOutDelta?: StockOutDelta;
+      stockInDelta?: StockInDelta;
+    };
     if (!body || typeof body !== "object") {
       return NextResponse.json({ ok: false, error: "Payload tidak valid." }, { status: 400 });
     }
+
+    const needsExisting = Boolean(body.stockOutDelta || body.stockInDelta);
+    const existing = needsExisting ? await loadAllData() : null;
+
+    const mergedStockOut =
+      body.stockOutDelta && existing
+        ? mergeDelta(existing.stockOut, body.stockOutDelta)
+        : body.stockOut ?? [];
+    const mergedStockIn =
+      body.stockInDelta && existing
+        ? mergeDelta(existing.stockIn, body.stockInDelta)
+        : body.stockIn ?? [];
 
     const data: AppDataSet = {
       sales: body.sales ?? [],
@@ -138,8 +180,8 @@ export async function POST(request: NextRequest) {
       ops: body.ops ?? [],
       items: body.items ?? [],
       bakulMasters: body.bakulMasters ?? [],
-      stockIn: body.stockIn ?? [],
-      stockOut: body.stockOut ?? [],
+      stockIn: mergedStockIn,
+      stockOut: mergedStockOut,
       priceHistory: body.priceHistory ?? [],
       opsCategories: body.opsCategories ?? [],
     };
@@ -151,7 +193,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: violation }, { status: 403 });
     }
 
-    await saveAllData(data);
+    await saveAllData(data, {
+      stockOutDelta: body.stockOutDelta,
+      stockInDelta: body.stockInDelta,
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     // Log error yang lebih detail di sisi server untuk debugging
