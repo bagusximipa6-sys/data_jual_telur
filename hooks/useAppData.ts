@@ -130,11 +130,12 @@ export function useAppData() {
         };
         setSyncStatus("saving");
         const success = await pushAllToServer(demoData);
-        if (success) {
+        if (success.ok) {
           stockInBaseline.current = demoData.stockIn;
           stockOutBaseline.current = demoData.stockOut;
         }
-        setSyncStatus(success ? "saved" : "error");
+        if (!success.ok) setLoadError(success.error);
+        setSyncStatus(success.ok ? "saved" : "error");
       }
       setDataLoaded(true);
       setLoading(false);
@@ -164,11 +165,12 @@ export function useAppData() {
     const timer = setTimeout(async () => {
       setSyncStatus("saving");
       const success = await pushAllToServer(dataset, stockOutBaseline.current, stockInBaseline.current);
-      if (success) {
+      if (success.ok) {
         stockInBaseline.current = [...stockIn];
         stockOutBaseline.current = [...stockOut];
       }
-      setSyncStatus(success ? "saved" : "error");
+      if (!success.ok) setLoadError(success.error);
+      setSyncStatus(success.ok ? "saved" : "error");
     }, 800);
 
     return () => clearTimeout(timer);
@@ -391,11 +393,12 @@ export function useAppData() {
         priceHistory: initialPriceHistory as PriceHistory[],
         opsCategories: initialOpsCategories as string[],
       });
-      if (success) {
+      if (success.ok) {
         stockInBaseline.current = initialStockIn as StockInRecord[];
         stockOutBaseline.current = initialStockOut as StockOutRecord[];
       }
-      setSyncStatus(success ? "saved" : resetOk ? "saved" : "error");
+      if (!success.ok) setLoadError(success.error);
+      setSyncStatus(success.ok ? "saved" : resetOk ? "saved" : "error");
     } catch {
       setSyncStatus("error");
     }

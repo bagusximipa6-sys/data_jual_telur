@@ -39,6 +39,20 @@ export type SyncStatus =
   | "error" // gagal menyimpan
   | "offline"; // tidak terhubung ke server
 
+export type SyncResult = { ok: true } | { ok: false; error: string };
+
+const REQUEST_TIMEOUT_MS = 15_000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const EMPTY: LocalDataset = {
   sales: [],
   bakulRecords: [],
@@ -55,7 +69,7 @@ const EMPTY: LocalDataset = {
 // Mengembalikan null jika gagal / tidak ada data.
 export async function fetchAllFromServer(): Promise<Partial<LocalDataset> | null> {
   try {
-    const res = await fetch("/api/data", { cache: "no-store" });
+    const res = await fetchWithTimeout("/api/data", { cache: "no-store" });
     if (!res.ok) return null;
     const json = (await res.json()) as { ok?: boolean; data?: Partial<LocalDataset> };
     if (!json.ok || !json.data) return null;
@@ -71,7 +85,7 @@ export async function pushAllToServer(
   data: LocalDataset,
   stockOutBaseline?: StockOutRecord[],
   stockInBaseline?: StockInRecord[]
-): Promise<boolean> {
+): Promise<SyncResult> {
   try {
     let requestData: LocalDataset | (Omit<LocalDataset, "stockOut" | "stockIn"> & {
       stockOut?: StockOutRecord[];
@@ -126,16 +140,23 @@ export async function pushAllToServer(
       headers["Content-Encoding"] = "gzip";
     }
 
-    const res = await fetch("/api/data", {
+    const res = await fetchWithTimeout("/api/data", {
       method: "POST",
       headers,
       body,
     });
-    if (!res.ok) return false;
-    const response = (await res.json()) as { ok?: boolean };
-    return response.ok === true;
-  } catch {
-    return false;
+    const response = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok || response.ok !== true) {
+      return { ok: false, error: response.error || `Server mengembalikan HTTP ${res.status}.` };
+    }
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof DOMException && error.name === "AbortError"
+        ? "Server tidak merespons dalam 15 detik."
+        : "Tidak dapat terhubung ke server.",
+    };
   }
 }
 

@@ -51,8 +51,25 @@ export const toNumber = (value: string | number): number => {
     if (denom > 0) return whole + numer / denom;
   }
 
-  // Normalize comma decimal separator, then parse
-  const normalized = v.replace(/[^0-9.,\-]/g, "").replace(",", ".");
+  const numeric = v.replace(/[^0-9.,\-]/g, "");
+  const lastComma = numeric.lastIndexOf(",");
+  const lastDot = numeric.lastIndexOf(".");
+  let normalized = numeric;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    // The last separator is the decimal separator: 1.910,9 or 1,910.9.
+    const decimalSeparator = lastComma > lastDot ? "," : ".";
+    const groupingSeparator = decimalSeparator === "," ? "." : ",";
+    normalized = numeric.replaceAll(groupingSeparator, "").replace(decimalSeparator, ".");
+  } else if (lastComma >= 0 || lastDot >= 0) {
+    const separator = lastComma >= 0 ? "," : ".";
+    const digitsAfter = numeric.length - numeric.lastIndexOf(separator) - 1;
+    // A three-digit suffix is Indonesian thousands grouping, not decimals.
+    normalized = digitsAfter === 3
+      ? numeric.replaceAll(separator, "")
+      : numeric.replace(separator, ".");
+  }
+
   const num = parseFloat(normalized);
   return Number.isFinite(num) ? num : 0;
 };
