@@ -73,6 +73,7 @@ export function useAppData() {
   const initStarted = useRef(false);
   const stockOutBaseline = useRef<StockOutRecord[] | undefined>(undefined);
   const stockInBaseline = useRef<StockInRecord[] | undefined>(undefined);
+  const datasetBaseline = useRef<LocalDataset | undefined>(undefined);
 
   // Membangun dataset gabungan untuk dikirim ke server / dipakai aplikasi.
   const state: AppDataSet = useMemo(
@@ -112,6 +113,11 @@ export function useAppData() {
         setStockOut(serverData.stockOut ?? []);
         stockInBaseline.current = serverData.stockIn ?? [];
         stockOutBaseline.current = serverData.stockOut ?? [];
+        datasetBaseline.current = {
+          sales: serverData.sales ?? [], bakulRecords: serverData.bakulRecords ?? [], ops: serverData.ops ?? [],
+          items: serverData.items ?? [], bakulMasters: serverData.bakulMasters ?? [], stockIn: serverData.stockIn ?? [],
+          stockOut: serverData.stockOut ?? [], priceHistory: serverData.priceHistory ?? [], opsCategories: serverData.opsCategories ?? [],
+        };
         setPriceHistory(serverData.priceHistory ?? []);
         setOpsCategories(serverData.opsCategories ?? []);
         setSyncStatus("saved");
@@ -133,6 +139,7 @@ export function useAppData() {
         if (success.ok) {
           stockInBaseline.current = demoData.stockIn;
           stockOutBaseline.current = demoData.stockOut;
+          datasetBaseline.current = demoData;
         }
         if (!success.ok) setLoadError(success.error);
         setSyncStatus(success.ok ? "saved" : "error");
@@ -164,10 +171,11 @@ export function useAppData() {
 
     const timer = setTimeout(async () => {
       setSyncStatus("saving");
-      const success = await pushAllToServer(dataset, stockOutBaseline.current, stockInBaseline.current);
+      const success = await pushAllToServer(dataset, stockOutBaseline.current, stockInBaseline.current, datasetBaseline.current);
       if (success.ok) {
         stockInBaseline.current = [...stockIn];
         stockOutBaseline.current = [...stockOut];
+        datasetBaseline.current = dataset;
       }
       if (!success.ok) setLoadError(success.error);
       setSyncStatus(success.ok ? "saved" : "error");
@@ -351,6 +359,11 @@ export function useAppData() {
         setStockOut(serverData.stockOut ?? []);
         stockInBaseline.current = serverData.stockIn ?? [];
         stockOutBaseline.current = serverData.stockOut ?? [];
+        datasetBaseline.current = {
+          sales: serverData.sales ?? [], bakulRecords: serverData.bakulRecords ?? [], ops: serverData.ops ?? [],
+          items: serverData.items ?? [], bakulMasters: serverData.bakulMasters ?? [], stockIn: serverData.stockIn ?? [],
+          stockOut: serverData.stockOut ?? [], priceHistory: serverData.priceHistory ?? [], opsCategories: serverData.opsCategories ?? [],
+        };
         setPriceHistory(serverData.priceHistory ?? []);
         setOpsCategories(serverData.opsCategories ?? []);
         setSyncStatus("saved");
@@ -396,6 +409,13 @@ export function useAppData() {
       if (success.ok) {
         stockInBaseline.current = initialStockIn as StockInRecord[];
         stockOutBaseline.current = initialStockOut as StockOutRecord[];
+        datasetBaseline.current = {
+          sales: initialSales as DailySale[], bakulRecords: initialBakulRecords as BakulRecord[],
+          ops: initialOperationalRecords as OperationalRecord[], items: initialItems as ItemMaster[],
+          bakulMasters: initialBakulMasters as BakulMaster[], stockIn: initialStockIn as StockInRecord[],
+          stockOut: initialStockOut as StockOutRecord[], priceHistory: initialPriceHistory as PriceHistory[],
+          opsCategories: initialOpsCategories as string[],
+        };
       }
       if (!success.ok) setLoadError(success.error);
       setSyncStatus(success.ok ? "saved" : resetOk ? "saved" : "error");

@@ -155,6 +155,7 @@ export async function POST(request: NextRequest) {
       ? gunzipSync(Buffer.from(bodyBytes)).toString("utf8")
       : new TextDecoder().decode(bodyBytes);
     const body = JSON.parse(bodyText) as Partial<AppDataSet> & {
+      partial?: boolean;
       stockOutDelta?: StockOutDelta;
       stockInDelta?: StockInDelta;
     };
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Payload tidak valid." }, { status: 400 });
     }
 
-    const needsExisting = Boolean(body.stockOutDelta || body.stockInDelta);
+    const needsExisting = Boolean(body.partial || body.stockOutDelta || body.stockInDelta);
     const existing = needsExisting ? await loadAllData() : null;
 
     const mergedStockOut =
@@ -175,15 +176,15 @@ export async function POST(request: NextRequest) {
         : body.stockIn ?? [];
 
     const data: AppDataSet = {
-      sales: body.sales ?? [],
-      bakulRecords: body.bakulRecords ?? [],
-      ops: body.ops ?? [],
-      items: body.items ?? [],
-      bakulMasters: body.bakulMasters ?? [],
-      stockIn: mergedStockIn,
-      stockOut: mergedStockOut,
-      priceHistory: body.priceHistory ?? [],
-      opsCategories: body.opsCategories ?? [],
+      sales: body.partial && existing ? body.sales ?? existing.sales : body.sales ?? [],
+      bakulRecords: body.partial && existing ? body.bakulRecords ?? existing.bakulRecords : body.bakulRecords ?? [],
+      ops: body.partial && existing ? body.ops ?? existing.ops : body.ops ?? [],
+      items: body.partial && existing ? body.items ?? existing.items : body.items ?? [],
+      bakulMasters: body.partial && existing ? body.bakulMasters ?? existing.bakulMasters : body.bakulMasters ?? [],
+      stockIn: body.partial && existing && !body.stockInDelta && body.stockIn === undefined ? existing.stockIn : mergedStockIn,
+      stockOut: body.partial && existing && !body.stockOutDelta && body.stockOut === undefined ? existing.stockOut : mergedStockOut,
+      priceHistory: body.partial && existing ? body.priceHistory ?? existing.priceHistory : body.priceHistory ?? [],
+      opsCategories: body.partial && existing ? body.opsCategories ?? existing.opsCategories : body.opsCategories ?? [],
     };
 
     // Defense-in-depth: tolak simpan jika ada data harian pada tanggal lampau

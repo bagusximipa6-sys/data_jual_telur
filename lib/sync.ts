@@ -84,7 +84,8 @@ export async function fetchAllFromServer(): Promise<Partial<LocalDataset> | null
 export async function pushAllToServer(
   data: LocalDataset,
   stockOutBaseline?: StockOutRecord[],
-  stockInBaseline?: StockInRecord[]
+  stockInBaseline?: StockInRecord[],
+  datasetBaseline?: LocalDataset
 ): Promise<SyncResult> {
   try {
     let requestData: LocalDataset | (Omit<LocalDataset, "stockOut" | "stockIn"> & {
@@ -116,7 +117,26 @@ export async function pushAllToServer(
       stockInDelta = { upsert, deletedIds };
     }
 
-    if (stockOutDelta || stockInDelta) {
+    if (datasetBaseline) {
+      const partialData: Record<string, unknown> = { partial: true };
+      const fields: (keyof LocalDataset)[] = [
+        "sales", "bakulRecords", "ops", "items", "bakulMasters", "priceHistory", "opsCategories",
+      ];
+      for (const field of fields) {
+        if (JSON.stringify(data[field]) !== JSON.stringify(datasetBaseline[field])) {
+          partialData[field] = data[field];
+        }
+      }
+      if (stockOutDelta) partialData.stockOutDelta = stockOutDelta;
+      if (stockInDelta) partialData.stockInDelta = stockInDelta;
+      if (!stockOutDelta && JSON.stringify(data.stockOut) !== JSON.stringify(datasetBaseline.stockOut)) {
+        partialData.stockOut = data.stockOut;
+      }
+      if (!stockInDelta && JSON.stringify(data.stockIn) !== JSON.stringify(datasetBaseline.stockIn)) {
+        partialData.stockIn = data.stockIn;
+      }
+      requestData = partialData as typeof requestData;
+    } else if (stockOutDelta || stockInDelta) {
       const { stockOut: fullStockOut, stockIn: fullStockIn, ...withoutDeltaRecords } = data;
       requestData = {
         ...withoutDeltaRecords,
