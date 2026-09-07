@@ -197,9 +197,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: violation }, { status: 403 });
     }
 
+    const writableFields: (keyof AppDataSet)[] = [
+      "sales", "bakulRecords", "ops", "items", "bakulMasters",
+      "stockIn", "stockOut", "priceHistory", "opsCategories",
+    ];
+    const partialFields = body.partial
+      ? new Set(writableFields.filter((field) => Object.prototype.hasOwnProperty.call(body, field)))
+      : undefined;
+
     await saveAllData(data, {
       stockOutDelta: body.stockOutDelta,
       stockInDelta: body.stockInDelta,
+      partialFields,
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

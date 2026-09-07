@@ -184,7 +184,11 @@ export async function loadAllData(): Promise<AppDataSet> {
 // === Simpan seluruh data (transaksi atomik) ===
 export async function saveAllData(
   data: AppDataSet,
-  options?: { stockOutDelta?: StockOutDelta; stockInDelta?: StockInDelta }
+  options?: {
+    stockOutDelta?: StockOutDelta;
+    stockInDelta?: StockInDelta;
+    partialFields?: Set<keyof AppDataSet>;
+  }
 ): Promise<void> {
   const {
     sales,
@@ -197,33 +201,35 @@ export async function saveAllData(
     priceHistory,
     opsCategories,
   } = data;
+  const partialFields = options?.partialFields;
+  const shouldWrite = (field: keyof AppDataSet) => !partialFields || partialFields.has(field);
 
   // Pastikan tabel sudah ada sebelum menulis.
   await ensureSchema();
   const client = await db.connect();
   try {
     await client.sql`BEGIN`;
-    await client.sql`DELETE FROM ops_records`;
-    await client.sql`DELETE FROM bakul_records`;
-    await client.sql`DELETE FROM sales`;
-    await client.sql`DELETE FROM price_history`;
-    if (!options?.stockOutDelta) {
+    if (shouldWrite("ops")) await client.sql`DELETE FROM ops_records`;
+    if (shouldWrite("bakulRecords")) await client.sql`DELETE FROM bakul_records`;
+    if (shouldWrite("sales")) await client.sql`DELETE FROM sales`;
+    if (shouldWrite("priceHistory")) await client.sql`DELETE FROM price_history`;
+    if (!options?.stockOutDelta && shouldWrite("stockOut")) {
       await client.sql`DELETE FROM stock_out`;
     }
-    if (!options?.stockInDelta) {
+    if (!options?.stockInDelta && shouldWrite("stockIn")) {
       await client.sql`DELETE FROM stock_in`;
     }
-    await client.sql`DELETE FROM bakul_masters`;
-    await client.sql`DELETE FROM items`;
+    if (shouldWrite("bakulMasters")) await client.sql`DELETE FROM bakul_masters`;
+    if (shouldWrite("items")) await client.sql`DELETE FROM items`;
 
     // Items
-    for (const item of items) {
+    for (const item of shouldWrite("items") ? items : []) {
       await client.sql`
         INSERT INTO items (id, name, sell_price, buy_price) VALUES (${item.id}, ${item.name}, ${item.sellPrice}, ${item.buyPrice ?? 0})
       `;
     }
     // Bakul masters
-    for (const m of bakulMasters) {
+    for (const m of shouldWrite("bakulMasters") ? bakulMasters : []) {
       await client.sql`
         INSERT INTO bakul_masters (id, name, address) VALUES (${m.id}, ${m.name}, ${m.address ?? ""})
       `;
@@ -248,7 +254,7 @@ export async function saveAllData(
             buy_price = EXCLUDED.buy_price
         `;
       }
-    } else {
+    } else if (shouldWrite("stockIn")) {
       for (const r of stockIn) {
         await client.sql`
           INSERT INTO stock_in (id, date, item_name, quantity, buy_price)
@@ -281,7 +287,7 @@ export async function saveAllData(
             created_by = EXCLUDED.created_by
         `;
       }
-    } else {
+    } else if (shouldWrite("stockOut")) {
       for (const r of stockOut) {
         await client.sql`
           INSERT INTO stock_out (id, date, bakul_name, item_name, quantity, price, buy_price_snapshot, sale_type, payment_method, created_by)
@@ -291,14 +297,14 @@ export async function saveAllData(
     }
 
     // Price history
-    for (const p of priceHistory) {
+    for (const p of shouldWrite("priceHistory") ? priceHistory : []) {
       await client.sql`
         INSERT INTO price_history (id, barang_id, harga_beli, harga_jual, effective_at)
         VALUES (${p.id}, ${p.barangId}, ${p.hargaBeli}, ${p.hargaJual}, ${p.effectiveAt})
       `;
     }
     // Sales
-    for (let i = 0; i < sales.length; i++) {
+    for (let i = 0; shouldWrite("sales") && i < sales.length; i++) {
       const s = sales[i];
       await client.sql`
         INSERT INTO sales (date, modal_qty, modal_total, sale_qty, sale_total, shrink, target, gross_profit, difference, operational, net_profit, note, position)
@@ -306,7 +312,7 @@ export async function saveAllData(
       `;
     }
     // Bakul records
-    for (let i = 0; i < bakulRecords.length; i++) {
+    for (let i = 0; shouldWrite("bakulRecords") && i < bakulRecords.length; i++) {
       const b = bakulRecords[i];
       await client.sql`
         INSERT INTO bakul_records (date, name, bill, paid, balance, note, position)
@@ -314,7 +320,7 @@ export async function saveAllData(
       `;
     }
     // Ops records
-    for (let i = 0; i < ops.length; i++) {
+    for (let i = 0; shouldWrite("ops") && i < ops.length; i++) {
       const o = ops[i];
       await client.sql`
         INSERT INTO ops_records (date, description, amount, note, position)
@@ -322,9 +328,11 @@ export async function saveAllData(
       `;
     }
     // Meta (ops_categories JSONB)
-    await client.sql`
-      UPDATE app_meta SET ops_categories = ${JSON.stringify(opsCategories)}::jsonb, updated_at = now() WHERE id = 1
-    `;
+    if (shouldWrite("opsCategories")) {
+      await client.sql`
+        UPDATE app_meta SET ops_categories = ${JSON.stringify(opsCategories)}::jsonb, updated_at = now() WHERE id = 1
+      `;
+    }
     await client.sql`COMMIT`;
   } catch (err) {
     await client.sql`ROLLBACK`;
