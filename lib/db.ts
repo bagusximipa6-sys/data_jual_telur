@@ -1,5 +1,5 @@
-import { Pool } from "@neondatabase/serverless";
-import type { PoolClient } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
+import type { FullQueryResults, NeonQueryFunction, NeonQueryPromise } from "@neondatabase/serverless";
 import { ensureSchema } from "@/lib/migrate";
 import type {
   BakulMaster,
@@ -42,28 +42,30 @@ const num = (v: unknown): number =>
 const MAX_QUERY_PARAMETERS = 60_000;
 const MAX_BULK_INSERT_ROWS = 500;
 
-async function withDatabase<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
-  const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
-  try {
-    const client = await pool.connect();
-    try {
-      return await callback(client);
-    } finally {
-      client.release();
-    }
-  } finally {
-    await pool.end();
+type DatabaseClient = NeonQueryFunction<false, true>;
+type DatabaseQuery = NeonQueryPromise<false, true, FullQueryResults<false>>;
+
+export function createDatabaseClient(): DatabaseClient {
+  const connectionString = process.env.POSTGRES_URL;
+  if (!connectionString) {
+    throw new Error("POSTGRES_URL is not configured");
   }
+  return neon(connectionString, { fullResults: true });
 }
 
-async function bulkInsert<T>(
-  client: PoolClient,
+async function withDatabase<T>(callback: (sql: DatabaseClient) => Promise<T>): Promise<T> {
+  return callback(createDatabaseClient());
+}
+
+function bulkInsert<T>(
+  sql: DatabaseClient,
+  queries: DatabaseQuery[],
   table: string,
   columns: string[],
   rows: T[],
   valuesForRow: (row: T, index: number) => unknown[],
   conflictClause = ""
-): Promise<void> {
+): void {
   if (rows.length === 0) return;
 
   const chunkSize = Math.max(
@@ -83,10 +85,10 @@ async function bulkInsert<T>(
       }).join(", ")})`;
     });
 
-    await client.query(
+    queries.push(sql.query(
       `INSERT INTO "${table}" (${columnNames}) VALUES ${placeholders.join(", ")}${conflictClause}`,
       values
-    );
+    ));
   }
 }
 
@@ -137,19 +139,19 @@ type MetaRow = { opsCategories: string[] };
 
 // === Load seluruh data dari DB ===
 export async function loadAllData(): Promise<AppDataSet> {
-  return withDatabase(async (client) => {
-    await ensureSchema(client);
+  return withDatabase(async (sql) => {
+    await ensureSchema(sql);
     const [itemsR, bakulMastersR, stockInR, stockOutR, salesR, bakulRecordsR, opsR, metaR, priceHistoryR] =
       await Promise.all([
-        client.query('SELECT id, name, sell_price AS "sellPrice", buy_price AS "buyPrice" FROM items ORDER BY created_at ASC'),
-        client.query("SELECT id, name, address FROM bakul_masters ORDER BY created_at ASC"),
-        client.query('SELECT id, date, item_name AS "itemName", quantity, buy_price AS "buyPrice" FROM stock_in ORDER BY created_at ASC'),
-        client.query('SELECT id, date, bakul_name AS "bakulName", item_name AS "itemName", quantity, price, buy_price_snapshot AS "buyPriceSnapshot", sale_type AS "saleType", payment_method AS "paymentMethod", created_by AS "createdBy" FROM stock_out ORDER BY created_at ASC'),
-        client.query('SELECT date, modal_qty AS "modalQty", modal_total AS "modalTotal", sale_qty AS "saleQty", sale_total AS "saleTotal", shrink, target, gross_profit AS "grossProfit", difference, operational, net_profit AS "netProfit", note FROM sales ORDER BY position ASC, created_at ASC'),
-        client.query("SELECT date, name, bill, paid, balance, note FROM bakul_records ORDER BY position ASC, created_at ASC"),
-        client.query("SELECT date, description, amount, note FROM ops_records ORDER BY position ASC, created_at ASC"),
-        client.query('SELECT ops_categories AS "opsCategories" FROM app_meta WHERE id = 1'),
-        client.query('SELECT id, barang_id AS "barangId", harga_beli AS "hargaBeli", harga_jual AS "hargaJual", effective_at AS "effectiveAt" FROM price_history ORDER BY effective_at ASC, created_at ASC'),
+        sql.query('SELECT id, name, sell_price AS "sellPrice", buy_price AS "buyPrice" FROM items ORDER BY created_at ASC'),
+        sql.query("SELECT id, name, address FROM bakul_masters ORDER BY created_at ASC"),
+        sql.query('SELECT id, date, item_name AS "itemName", quantity, buy_price AS "buyPrice" FROM stock_in ORDER BY created_at ASC'),
+        sql.query('SELECT id, date, bakul_name AS "bakulName", item_name AS "itemName", quantity, price, buy_price_snapshot AS "buyPriceSnapshot", sale_type AS "saleType", payment_method AS "paymentMethod", created_by AS "createdBy" FROM stock_out ORDER BY created_at ASC'),
+        sql.query('SELECT date, modal_qty AS "modalQty", modal_total AS "modalTotal", sale_qty AS "saleQty", sale_total AS "saleTotal", shrink, target, gross_profit AS "grossProfit", difference, operational, net_profit AS "netProfit", note FROM sales ORDER BY position ASC, created_at ASC'),
+        sql.query("SELECT date, name, bill, paid, balance, note FROM bakul_records ORDER BY position ASC, created_at ASC"),
+        sql.query("SELECT date, description, amount, note FROM ops_records ORDER BY position ASC, created_at ASC"),
+        sql.query('SELECT ops_categories AS "opsCategories" FROM app_meta WHERE id = 1'),
+        sql.query('SELECT id, barang_id AS "barangId", harga_beli AS "hargaBeli", harga_jual AS "hargaJual", effective_at AS "effectiveAt" FROM price_history ORDER BY effective_at ASC, created_at ASC'),
       ]);
 
   const items: ItemMaster[] = (itemsR.rows as unknown as ItemRow[]).map((r) => ({
@@ -261,32 +263,32 @@ export async function saveAllData(
   const partialFields = options?.partialFields;
   const shouldWrite = (field: keyof AppDataSet) => !partialFields || partialFields.has(field);
 
-  return withDatabase(async (client) => {
-    await ensureSchema(client);
-    try {
-    await client.query("BEGIN");
-    if (shouldWrite("ops")) await client.query("DELETE FROM ops_records");
-    if (shouldWrite("bakulRecords")) await client.query("DELETE FROM bakul_records");
-    if (shouldWrite("sales")) await client.query("DELETE FROM sales");
-    if (shouldWrite("priceHistory")) await client.query("DELETE FROM price_history");
+  return withDatabase(async (sql) => {
+    await ensureSchema(sql);
+    const queries: DatabaseQuery[] = [];
+
+    if (shouldWrite("ops")) queries.push(sql.query("DELETE FROM ops_records"));
+    if (shouldWrite("bakulRecords")) queries.push(sql.query("DELETE FROM bakul_records"));
+    if (shouldWrite("sales")) queries.push(sql.query("DELETE FROM sales"));
+    if (shouldWrite("priceHistory")) queries.push(sql.query("DELETE FROM price_history"));
     if (!options?.stockOutDelta && shouldWrite("stockOut")) {
-      await client.query("DELETE FROM stock_out");
+      queries.push(sql.query("DELETE FROM stock_out"));
     }
     if (!options?.stockInDelta && shouldWrite("stockIn")) {
-      await client.query("DELETE FROM stock_in");
+      queries.push(sql.query("DELETE FROM stock_in"));
     }
-    if (shouldWrite("bakulMasters")) await client.query("DELETE FROM bakul_masters");
-    if (shouldWrite("items")) await client.query("DELETE FROM items");
+    if (shouldWrite("bakulMasters")) queries.push(sql.query("DELETE FROM bakul_masters"));
+    if (shouldWrite("items")) queries.push(sql.query("DELETE FROM items"));
 
     // Items
     if (shouldWrite("items")) {
-      await bulkInsert(client, "items", ["id", "name", "sell_price", "buy_price"], items,
+      bulkInsert(sql, queries, "items", ["id", "name", "sell_price", "buy_price"], items,
         (item) => [item.id, item.name, item.sellPrice, item.buyPrice ?? 0]);
     }
 
     // Bakul masters
     if (shouldWrite("bakulMasters")) {
-      await bulkInsert(client, "bakul_masters", ["id", "name", "address"], bakulMasters,
+      bulkInsert(sql, queries, "bakul_masters", ["id", "name", "address"], bakulMasters,
         (master) => [master.id, master.name, master.address ?? ""]);
     }
 
@@ -294,11 +296,12 @@ export async function saveAllData(
     const stockInDelta = options?.stockInDelta;
     if (stockInDelta) {
       if (stockInDelta.deletedIds.length > 0) {
-        await client.query("DELETE FROM stock_in WHERE id = ANY($1)", [stockInDelta.deletedIds]);
+        queries.push(sql.query("DELETE FROM stock_in WHERE id = ANY($1)", [stockInDelta.deletedIds]));
       }
       const upserts = uniqueById(stockInDelta.upsert);
-      await bulkInsert(
-        client,
+      bulkInsert(
+        sql,
+        queries,
         "stock_in",
         ["id", "date", "item_name", "quantity", "buy_price"],
         upserts,
@@ -310,7 +313,7 @@ export async function saveAllData(
           buy_price = EXCLUDED.buy_price`
       );
     } else if (shouldWrite("stockIn")) {
-      await bulkInsert(client, "stock_in", ["id", "date", "item_name", "quantity", "buy_price"], stockIn,
+      bulkInsert(sql, queries, "stock_in", ["id", "date", "item_name", "quantity", "buy_price"], stockIn,
         (record) => [record.id, record.date, record.itemName, record.quantity, record.buyPrice]);
     }
 
@@ -318,11 +321,12 @@ export async function saveAllData(
     const stockOutDelta = options?.stockOutDelta;
     if (stockOutDelta) {
       if (stockOutDelta.deletedIds.length > 0) {
-        await client.query("DELETE FROM stock_out WHERE id = ANY($1)", [stockOutDelta.deletedIds]);
+        queries.push(sql.query("DELETE FROM stock_out WHERE id = ANY($1)", [stockOutDelta.deletedIds]));
       }
       const upserts = uniqueById(stockOutDelta.upsert);
-      await bulkInsert(
-        client,
+      bulkInsert(
+        sql,
+        queries,
         "stock_out",
         ["id", "date", "bakul_name", "item_name", "quantity", "price", "buy_price_snapshot", "sale_type", "payment_method", "created_by"],
         upserts,
@@ -350,8 +354,9 @@ export async function saveAllData(
           created_by = EXCLUDED.created_by`
       );
     } else if (shouldWrite("stockOut")) {
-      await bulkInsert(
-        client,
+      bulkInsert(
+        sql,
+        queries,
         "stock_out",
         ["id", "date", "bakul_name", "item_name", "quantity", "price", "buy_price_snapshot", "sale_type", "payment_method", "created_by"],
         stockOut,
@@ -372,8 +377,9 @@ export async function saveAllData(
 
     // Price history
     if (shouldWrite("priceHistory")) {
-      await bulkInsert(
-        client,
+      bulkInsert(
+        sql,
+        queries,
         "price_history",
         ["id", "barang_id", "harga_beli", "harga_jual", "effective_at"],
         priceHistory,
@@ -383,8 +389,9 @@ export async function saveAllData(
 
     // Sales
     if (shouldWrite("sales")) {
-      await bulkInsert(
-        client,
+      bulkInsert(
+        sql,
+        queries,
         "sales",
         ["date", "modal_qty", "modal_total", "sale_qty", "sale_total", "shrink", "target", "gross_profit", "difference", "operational", "net_profit", "note", "position"],
         sales,
@@ -408,8 +415,9 @@ export async function saveAllData(
 
     // Bakul records
     if (shouldWrite("bakulRecords")) {
-      await bulkInsert(
-        client,
+      bulkInsert(
+        sql,
+        queries,
         "bakul_records",
         ["date", "name", "bill", "paid", "balance", "note", "position"],
         bakulRecords,
@@ -427,8 +435,9 @@ export async function saveAllData(
 
     // Ops records
     if (shouldWrite("ops")) {
-      await bulkInsert(
-        client,
+      bulkInsert(
+        sql,
+        queries,
         "ops_records",
         ["date", "description", "amount", "note", "position"],
         ops,
@@ -437,38 +446,29 @@ export async function saveAllData(
     }
     // Meta (ops_categories JSONB)
     if (shouldWrite("opsCategories")) {
-      await client.query(
+      queries.push(sql.query(
         "UPDATE app_meta SET ops_categories = $1::jsonb, updated_at = now() WHERE id = 1",
         [JSON.stringify(opsCategories)]
-      );
+      ));
     }
-    await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    }
+    if (queries.length > 0) await sql.transaction(queries);
   });
 }
 
 // === Reset seluruh data ke awal kosong ===
 export async function resetAllData(): Promise<void> {
-  await withDatabase(async (client) => {
-    await ensureSchema(client);
-    try {
-    await client.query("BEGIN");
-    await client.query("DELETE FROM ops_records");
-    await client.query("DELETE FROM bakul_records");
-    await client.query("DELETE FROM sales");
-    await client.query("DELETE FROM price_history");
-    await client.query("DELETE FROM stock_out");
-    await client.query("DELETE FROM stock_in");
-    await client.query("DELETE FROM bakul_masters");
-    await client.query("DELETE FROM items");
-    await client.query("UPDATE app_meta SET ops_categories = '[]'::jsonb, updated_at = now() WHERE id = 1");
-    await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    }
+  await withDatabase(async (sql) => {
+    await ensureSchema(sql);
+    await sql.transaction([
+      sql.query("DELETE FROM ops_records"),
+      sql.query("DELETE FROM bakul_records"),
+      sql.query("DELETE FROM sales"),
+      sql.query("DELETE FROM price_history"),
+      sql.query("DELETE FROM stock_out"),
+      sql.query("DELETE FROM stock_in"),
+      sql.query("DELETE FROM bakul_masters"),
+      sql.query("DELETE FROM items"),
+      sql.query("UPDATE app_meta SET ops_categories = '[]'::jsonb, updated_at = now() WHERE id = 1"),
+    ]);
   });
 }

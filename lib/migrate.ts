@@ -1,4 +1,4 @@
-import type { PoolClient } from "@neondatabase/serverless";
+import type { NeonQueryFunction } from "@neondatabase/serverless";
 
 // Skema database (CREATE TABLE IF NOT EXISTS) yang idempotent.
 // Bisa dijalankan berulang kali dengan aman.
@@ -104,9 +104,7 @@ const SCHEMA_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_price_history_barang ON price_history (barang_id)`,
 ];
 
-// Menjalankan skema terhadap koneksi milik request saat ini.
-export async function ensureSchema(client: PoolClient): Promise<void> {
-  for (const stmt of SCHEMA_STATEMENTS) {
-    await client.query(stmt);
-  }
+// Menjalankan skema sebagai satu transaksi HTTP milik request saat ini.
+export async function ensureSchema(sql: NeonQueryFunction<false, true>): Promise<void> {
+  await sql.transaction(SCHEMA_STATEMENTS.map((stmt) => sql.query(stmt)));
 }

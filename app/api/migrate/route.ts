@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { Pool } from "@neondatabase/serverless";
-import type { PoolClient } from "@neondatabase/serverless";
+import { createDatabaseClient } from "@/lib/db";
 import { isAdminRequest, unauthorizedResponse } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +11,6 @@ export async function POST(request: NextRequest) {
   if (!isAdminRequest(request)) {
     return unauthorizedResponse();
   }
-  const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
-  let client: PoolClient | null = null;
   try {
     // Ambil schema dari body (opsional) atau baca dari file
     let schema: string;
@@ -35,18 +32,15 @@ export async function POST(request: NextRequest) {
       .map((s) => s.trim())
       .filter((s) => s.length > 0 && !s.startsWith("--"));
 
-    client = await pool.connect();
+    const sql = createDatabaseClient();
 
     for (const stmt of statements) {
-      await client.query(stmt);
+      await sql.query(stmt);
     }
 
     return NextResponse.json({ ok: true, executed: statements.length });
   } catch (err) {
     console.error("POST /api/migrate error:", err);
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
-  } finally {
-    client?.release();
-    await pool.end();
   }
 }
