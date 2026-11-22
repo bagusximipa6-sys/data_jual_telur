@@ -1,4 +1,4 @@
-import { db } from "@vercel/postgres";
+import type { PoolClient } from "@neondatabase/serverless";
 
 // Skema database (CREATE TABLE IF NOT EXISTS) yang idempotent.
 // Bisa dijalankan berulang kali dengan aman.
@@ -104,28 +104,9 @@ const SCHEMA_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_price_history_barang ON price_history (barang_id)`,
 ];
 
-// Menjalankan skema terhadap database.
-// Idempotent: aman dipanggil berulang kali.
-let schemaInitialized = false;
-let schemaPromise: Promise<void> | null = null;
-
-export async function ensureSchema(): Promise<void> {
-  // Hindari eksekusi berulang dalam satu proses server.
-  if (schemaInitialized) return;
-  if (schemaPromise) return schemaPromise;
-
-schemaPromise = (async () => {
-    const client = await db.connect();
-    try {
-      const c = client as unknown as { query: (text: string) => Promise<unknown> };
-      for (const stmt of SCHEMA_STATEMENTS) {
-        await c.query(stmt);
-      }
-      schemaInitialized = true;
-    } finally {
-      client.release();
-    }
-  })();
-
-  return schemaPromise;
+// Menjalankan skema terhadap koneksi milik request saat ini.
+export async function ensureSchema(client: PoolClient): Promise<void> {
+  for (const stmt of SCHEMA_STATEMENTS) {
+    await client.query(stmt);
+  }
 }

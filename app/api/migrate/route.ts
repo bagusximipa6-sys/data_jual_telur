@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { db } from "@vercel/postgres";
+import { Pool } from "@neondatabase/serverless";
+import type { PoolClient } from "@neondatabase/serverless";
 import { isAdminRequest, unauthorizedResponse } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,8 @@ export async function POST(request: NextRequest) {
   if (!isAdminRequest(request)) {
     return unauthorizedResponse();
   }
-  let client: { release: () => void } | null = null;
+  const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
+  let client: PoolClient | null = null;
   try {
     // Ambil schema dari body (opsional) atau baca dari file
     let schema: string;
@@ -33,11 +35,10 @@ export async function POST(request: NextRequest) {
       .map((s) => s.trim())
       .filter((s) => s.length > 0 && !s.startsWith("--"));
 
-    client = await db.connect();
-    const c = client as unknown as { query: (text: string) => Promise<unknown> };
+    client = await pool.connect();
 
     for (const stmt of statements) {
-      await c.query(stmt);
+      await client.query(stmt);
     }
 
     return NextResponse.json({ ok: true, executed: statements.length });
@@ -46,5 +47,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
   } finally {
     client?.release();
+    await pool.end();
   }
 }
